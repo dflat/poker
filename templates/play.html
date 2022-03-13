@@ -1,0 +1,24 @@
+<!doctype html>
+<title>Live Hand: {{user}}</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='style/main.css') }}">
+<script type="text/javascript" src ="{{ url_for('static', filename = 'js/main.js') }}">
+</script>
+
+<div id="container">
+    <div id="status-bar">
+      <a class="badge">{{user}}</a>
+      <a class="badge">Round #{{round_id}}</a>
+    </div>
+
+    <div id="card-grid" data="{{user}}">
+        {% for val in values %}
+          <div class="card-row">
+            {% for suit, unicode in suits.items() %}
+            <div class="card-cell" onclick="void(0)">
+              <a class="card {{suit}}" data="{{val}}_{{suit}}">{{val}}{{unicode}}</a>
+            </div>
+            {% endfor %} 
+          </div>
+        {% endfor %} 
+    </div>
+</div>

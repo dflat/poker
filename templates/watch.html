@@ -1,0 +1,14 @@
+<!doctype html>
+<title>Watch Live: {{round_id}}</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='style/main.css') }}">
+<script type="text/javascript" src ="{{ url_for('static', filename = 'js/watch.js') }}">
+</script>
+
+
+<div id="watch-container">
+    {% include 'watch_frag_hands.html' %}
+</div>
+
+<div id="display-toggle">
+    <a class="toggle-button">hide / reveal</a>
+</div>

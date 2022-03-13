@@ -1,0 +1,19 @@
+<div id="hands-container">
+    <div id="card-grid">
+      {% for user, hand in hands.items() %}
+      <div class="hand-row" data="{{user}}">
+          <div class="user-container">
+            <a class="user-tag">{{user}}</a>
+          </div>
+          {% for card in [hand.card_a, hand.card_b] %}
+          <div class="card-cell hand-card-cell" onclick="void(0)">
+            <a class="card {{card.suit}}" data="{{card.value}}_{{card.suit}}">
+                    {{card.value}}{{card.suit_unicode}}
+            </a>
+          </div>
+          {% endfor %} 
+      </div>
+      {% endfor %} 
+    </div> <!-- end #card-grid -->
+</div>
+

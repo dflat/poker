@@ -1,0 +1,121 @@
+html { /* needed for fast touch response on iOS */
+-ms-touch-action: manipulation;
+touch-action: manipulation;
+-webkit-tap-highlight-color: rgba(0,0,0,0);
+}
+
+body {
+    background:#eee;
+}
+.card {
+    display: inline-block;
+    font-size:4em;
+    opacity:.4;
+}
+
+div#container {
+   /* background:blue;*/
+}
+
+div#status-bar {
+    background: #ccc;
+    padding: 1em;
+}
+
+.badge {
+   color: #555; 
+   font-size:2em;
+   background:#eee;
+}
+
+
+a.user-tag {
+    font-size: 2em;
+    font-style: italic;
+    min-width: 20vw;
+    max-width: 20vw;
+    display: inline-block;
+    overflow: hidden;
+    padding: .5em;
+    padding-right: 2em;
+    color: #2d2d2d;
+}
+
+.chosen {
+    opacity:1;
+}
+.card-row {
+    display:flex;
+    justify-content:space-around;
+    background:#eee;
+}
+
+/* watch.html specific classes */
+.hand-row {
+    display: flex;
+    background: #bebebe;
+    border: solid #b7b7b7 1px;
+    margin: .5em;
+    padding: .5em;
+    border-radius: .5em;
+}
+
+.hand-card-cell{
+    opacity:1 !important;
+}
+
+.user-container {
+    padding: .5em;
+    background: #66666b;
+    border-top-left-radius: .5em;
+    border-bottom-left-radius: .5em;
+}
+    
+.obscure-view {
+/*    visibility: hidden;*/
+    filter: blur(0.5rem) contrast(5%); 
+    /*-webkit-filter: blur(1.5rem) hue-rotate(90deg) sepia(100%);*/
+    transition: all 0.5s ease;
+}
+
+#display-toggle {
+    padding: 2em;
+    background: #ccc; /*#d6c8ff;*/
+    margin: .5em;
+    height: 10vh;
+    border-radius: .5em;
+    border: solid 1px #c09fc0;
+    box-shadow: #b1b1b1 2px 2px 4px 1px;
+    position: fixed;
+    bottom: 0;
+    right: 0;
+}
+
+.toggle-button {
+    font-size: 3em;
+    color: white;
+    display: flex;
+    justify-content: center;
+}
+/* end watch.html specific classes */
+
+.card-cell {
+    background:#eee;
+    display:flex;
+    justify-content:center;
+    width:10%;
+    padding:1em;
+}
+.spades {
+    color: black;
+}
+.clubs {
+    color: black;
+}
+.hearts {
+    color: red;
+}
+.diamonds {
+    color: red;
+}
+
