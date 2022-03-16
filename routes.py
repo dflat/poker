@@ -108,6 +108,10 @@ def api_round(round_id):
     round_data = db['rounds'][round_id]
     return jsonify({username:hand.to_dict() for username,hand in round_data.items()})
 
+@app.route('/ring')
+def ring():
+    return render_template('ring.html')
+
 @app.route('/play/')
 def play_no_username():
     global REQS
