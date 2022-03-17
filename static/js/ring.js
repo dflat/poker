@@ -26,6 +26,23 @@ function touchstart(e) {
     timer = setTimeout(onlongtouch, touchduration); 
 }
 
+function card_display_box_touched(e) {
+    e.preventDefault()
+    const i = this.index
+    current_display_card_index = i
+    clear_selected_card()
+    remove_card_from_hand(i)
+    if (get_hand_size() == 0) {
+        current_display_card_index = 0
+    }
+
+}
+
+function get_hand_size() { return Object.keys(hand).length }
+
+function remove_card_from_hand(i) {
+    delete hand[i]
+}
 
 function get_px_in_em(elem) {
     return parseFloat(getComputedStyle(elem).fontSize);
@@ -43,17 +60,27 @@ var r = 0;
 var d = 0;
 var shift_y = 0;
 var touch_start_time = 0;
-var right_bound = 0//-Math.PI/12 //Math.PI/12;
-var left_bound = -(Math.PI)// - Math.PI/12);
+var right_bound = -Math.PI/6//0
+var left_bound = -(Math.PI + right_bound)//-(Math.PI)
+
+var start_bound_left_side;
+var start_bound_right_side;
+var arclength = Math.PI - Math.PI/3
+
 var dur = 0;
 var MAX_R; 
+
+function quad_ease(t) {
+    //return (t + (1/4)*Math.sin(5*Math.PI*t))
+    return Math.pow(t,1/2)
+}
 
 function draw_circle(card, i) {
 //    var r = R*px_in_em;
     //d = Math.min(window.innerWidth, window.innerHeight);
 
     var clamped_dur = clamp(dur,mn=0,mx=1)
-    r = clamped_dur*MAX_R;
+    r = quad_ease(clamped_dur)*MAX_R;
 
     L = i/(N-1); // runs from 0 to 1 in steps
     var t = (1-L)*right_bound + L*left_bound //-1*Math.PI*(i/(N-1));
@@ -68,6 +95,13 @@ function draw_circle(card, i) {
     off_y = card.clientHeight/2;
     card.style.left = cx + 0*d/2 + dx - off_x + 'px';
     card.style.top = shift_y + cy + dy - off_y + 'px';
+    
+    if(card_is_already_in_hand(card)) {
+        card.classList.add('already-selected-card')
+    }
+    else
+        card.classList.remove('already-selected-card')
+
     if (dur >= 4) {
        clearInterval(intervalID);
     }
@@ -128,11 +162,15 @@ function touchend(e) {
 
     if (selected_card && active_suit) {
         update_hand_state()
-        //TODO: block multitouch bugs in touchstart eventlistener
-        // don't allow for touchstart if not inside a suit block
+        advance_display_card_index()
     }
 
     reset_suit_nodes()
+    var msg = []
+//    hand.forEach(card => msg.push(card[0]+suit_unicode[card[1]]))
+    each(hand, (i,card) => msg.push(card[0]+suit_unicode[card[1]]))
+    debug_info('cards in hand: ' + msg.join(', '))
+//    debug_info('cards in hand:'+hand[0][0]+hand[0][1]+', '+hand[1][0]+hand[1][1])
 
 }
 
@@ -140,8 +178,11 @@ var MAX_HAND_SIZE = 2;
 function update_hand_state() {
     var ix = current_display_card_index
     var card = display_cards[ix]
-    hand[ix] = (card.value, card.suit)
-    debug_info(hand[ix])
+    hand[ix] = [card.value, card.suit]
+}
+
+function advance_display_card_index(){
+    const ix = current_display_card_index
     current_display_card_index = (ix + 1) % MAX_HAND_SIZE
 }
 
@@ -176,9 +217,11 @@ function draw_sector(px,py) {
     var range = r/2;
     var dx = -clamp(vx, mn=-range, mx=range);
     var L = rescale(dx, mn=-range, mx=range, a=left_bound, b=right_bound)
+    var sector_width = Math.abs(left_bound-right_bound)
     //var phi = L;
 
-    var theta_slice = 2*Math.PI/(13);
+   //var theta_slice = 2*Math.PI/(13);
+    var theta_slice = 2*sector_width/(13);
     var ctx = plane.getContext('2d');
     ctx.clearRect(0,0,plane.width,plane.height);
     ctx.fillStyle = 'white';
@@ -203,6 +246,9 @@ function draw_sector(px,py) {
             if (abs_dt < min_dist){
                 min_dist = abs_dt;
                 selected_card = card;
+                if(card_is_already_in_hand(selected_card)) {
+                    selected_card = null;
+                }
             }
         }
         else{
@@ -212,16 +258,15 @@ function draw_sector(px,py) {
     });
     if (min_dist > theta_slice){
         selected_card = null;
-        //debug_info(" ");
     }
     if (selected_card && active_suit){
         display_selected_card()
-        //debug_info(selected_card.innerText + ' ' + suit_unicode[active_suit])
         //select_interval_id = setInterval(check_held_time, 100, card_select_start,
          //                               selected_card, prev_selected_card)
     }
     else {
         clear_selected_card()
+        remove_card_from_hand(current_display_card_index)
     }
 
     prev_selected_card = selected_card
@@ -230,6 +275,15 @@ function draw_sector(px,py) {
 
 }
 
+function card_is_already_in_hand(selected_card) {
+    var result = false;
+    Object.values(hand).forEach(card => {
+        if (card[0] == selected_card.id && card[1] == active_suit) {
+            result = true
+        }
+    });
+    return result
+}
 
 var current_display_card_index = 0;
 function display_selected_card() {
@@ -238,6 +292,8 @@ function display_selected_card() {
     display_box.value = selected_card.innerText 
     display_box.suit = active_suit
     display_anchor.innerText = selected_card.innerText + ' ' + suit_unicode[active_suit]
+
+    display_anchor.style.color = suit_colors_dark[suit_codes[active_suit]]
 }
 
 function clear_selected_card() {
@@ -291,9 +347,10 @@ function init_canvas() {
     plane.classList.add('lock-screen');
 }
 
-var suit_unicode = {heart:'\u2665', diamond:'\u2666', spade:'\u2660', club:'\u2663'};
+const suit_unicode = {heart:'\u2665', diamond:'\u2666', spade:'\u2660', club:'\u2663'};
 var suit_nodes = [];
-var suits = ['heart','diamond','spade','club']
+const suits = ['heart','diamond','spade','club']
+const suit_codes = {'heart':0,'diamond':1,'spade':2,'club':3}
 var active_suit = null;
 var SUIT_SELECTED_CLS = 'selected-suit'
 
@@ -339,8 +396,17 @@ function modulate_suit_size(suit_box) {
 
 var suit_symbol_size_px;
 var suit_default_opacity;
+const suit_colors = ['#ec2c30', '#1843d7', '#404241', '#1f8a59']
+const suit_colors_dark = [ '#ec2c30', //heart
+                           '#1843d7', //diam
+                            '#0a1527', //spade
+                           '#1f8a59'] //club
+                           //rgb_to_hex([143, 46, 76]), //heart '#D16D8C'
+                           //rgb_to_hex([114, 50, 170]), //diam
+                           //rgb_to_hex([38, 38, 38]), //spade'#404241'
+                           //rgb_to_hex([79, 151, 87]) ] //club
+
 function init_suit_nodes() {
-    var suit_colors = ['#D16D8C','#A26DD1', '#404241', '#6DD178']
     var i = 0
     var w = window.innerWidth
     var h = window.innerHeight
@@ -372,6 +438,51 @@ function init_suit_nodes() {
 }
 
 
+function init_status_bar() {
+    var bar_height = Math.round(h/16) - 10
+    var font_size = bar_height / 2
+
+    var container = document.createElement('div')
+    var name_node = document.createElement('a') 
+    var round_node = document.createElement('a') 
+
+    container.classList.add('status-bar')
+
+    name_node.classList.add('name-tag')
+    name_node.classList.add('status-tag')
+    name_node.style.fontSize = font_size + 'px' 
+
+    round_node.classList.add('round-num-tag')
+    round_node.classList.add('status-tag')
+    round_node.style.fontSize = font_size + 'px' 
+
+    name_node.innerText = 'default_name'
+    round_node.innerText = 'round # X'
+
+    container.style.position = 'absolute'
+    container.style.left = 0 + 'px' 
+    container.style.top = 0 + 'px'
+    container.style.width = w +'px'
+    container.style.height = bar_height + 'px'
+
+    container.appendChild(name_node)
+    container.appendChild(round_node)
+    document.body.appendChild(container)
+}
+
+/*
+function nest(...elems) {
+    nodes = []
+    var root = document.createElement(elems[0])
+    nodes.append(root)
+    for (var i=1; i < elems.length; i++){
+        node = document.createElement(elems[i])
+        root.appendChild(node)
+        root = node
+    }
+}
+*/
+
 var display_cards = [];
 function init_card_display_node(i) {
     var w = window.innerWidth
@@ -383,28 +494,33 @@ function init_card_display_node(i) {
     var container = document.createElement('div')
     var node = document.createElement('a') 
     node.style.fontSize = font_size + 'px' 
-    //node.style.position = 'absolute' // no ...center in the div...
     node.innerText = ''
     
+    node.index = i
+    container.index = i
+    node.id = 'display-card' + i
+    container.id = 'display-card-box' + i
     node.classList.add('display-card')
     container.classList.add('display-card-box')
+
     container.value = null;
     container.suit = null;
     container.style.position = 'absolute'
-
     container.style.left = i * half_w + 4 + 'px'
     container.style.top = Math.round(quad_h/4) + 'px'
     container.style.width = half_w - 8 +'px'
     container.style.height = quad_h + 'px'
-    container.appendChild(node)
 
+    //node.style.color = suit_colors[i]
+
+    container.appendChild(node)
     display_cards.push(container)
     document.body.appendChild(container)
-    //container.addEventListener("touchstart", suit_box_touched, false);
+    container.addEventListener("touchstart", card_display_box_touched, false); //WIP
 
 }
 
-var hand = [];
+var hand = { };
 var debug_node;
 var debug_msg = '';
 function debug_info(msg) {
@@ -422,17 +538,48 @@ function init_debug(){
     debug_node.innerText = 'debug info'
     document.body.appendChild(debug_node)
 }
+
+/* ---- utility funcs */
+function each(obj, fn) { Object.keys(obj).forEach(key => fn(key, obj[key])); }
+
+function rgb_to_hex(rgb_arr) {
+    /*
+    var hex = []
+    rgb_arr.forEach(b => {
+        b = b.toString(16)
+        hex.push(b.length == 1 ? '0'+b : b)
+    });
+    */
+    var hex = rgb_arr.map( b => {
+        b = b.toString(16)
+        return b.length == 1 ? '0'+b : b
+    });
+    return "#"+hex.join('')
+}
+/* ---- end utility funcs */
+
+/*TODO.. use this to respond to changing viewport size on device...*/
+var w;
+var h;
+function update_dimensions() {
+    w = window.innerWidth
+    h = window.innerHeight
+    d = Math.min(window.innerWidth, window.innerHeight);
+    MAX_R = Math.round((.9)*d/2)
+}
+
 document.addEventListener("DOMContentLoaded", function(event) {
 
-    d = Math.min(window.innerWidth, window.innerHeight);
-    MAX_R = (0.6)*d/2
-    //r = .5*(d/2);
+    update_dimensions()
+    //d = Math.min(window.innerWidth, window.innerHeight);
+    //MAX_R = Math.round((.9)*d/2)
     shift_y = 0//-(r);
 
     init_debug();
     init_card_nodes();
     init_suit_nodes();
     init_canvas();
+    init_status_bar();
     init_card_display_node(0) // to display two chosen cards
     init_card_display_node(1)
 

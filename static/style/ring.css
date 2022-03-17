@@ -1,3 +1,9 @@
+:root {
+   --grey-trans: rgba(200,200,200,0.5);
+   --gold:#F5AA23;
+   --black-halo: #444;
+}
+
 html {
     -webkit-touch-callout:none;
     -webkit-user-select:none;
@@ -47,17 +53,55 @@ div{
 }
 
 .display-card {
-    /*font-size:3em;*/
+    /*
+    -webkit-transition: all 1s ease-in-out;
+    -moz-transition: all 0.1s ease-in-out;
+    -o-transition: all 0.1s ease-in-out;
+    transition: all 0.1s ease-in-out;
+    */
 }
+
 .display-card-box{
     display:flex;
     align-items:center;
     justify-content:center;
-    background:#ccc;
+    background:var(--grey-trans);
     border-top: solid #bbb 4px;
-    border-bottom: solid #bbb 4px;
-    opacity:1;
+    border-bottom: solid var(--grey-trans) 4px;
 }
+
+.already-selected-card {
+    /*color:blue;*/
+    color:var(--gold);
+    font-weight:bolder;
+    text-shadow: 0 0 1px var(--black-halo), 0 0 1px var(--black-halo),
+                0 0 1px var(--black-halo), 0 0 1px var(--black-halo);
+}
+
+.status-bar {
+    background:#ddd;
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+}
+
+.status-tag {
+    background:#eee;
+    padding:10px;
+    border-radius:10px;
+}
+
+.name-tag {
+    margin-left:20px;
+    background:#ddd;
+    font-style: italic;
+}
+
+.round-num-tag {
+    margin-right:20px;
+    border:2px solid #ccc;
+}
+
 canvas#plane{
     background:#ccc;
     /*height: 100%;*/
