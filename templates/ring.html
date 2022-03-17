@@ -3,6 +3,10 @@
 <link rel="stylesheet" href="{{ url_for('static', filename='style/ring.css') }}">
 <script type="text/javascript" src ="{{ url_for('static', filename = 'js/ring.js') }}">
 </script>
+<script type="text/javascript">
+            emojicon = load_emoji({{emoji|tojson}})
+</script>
+
 <div>
     <canvas id='plane'></canvas>
 </div>

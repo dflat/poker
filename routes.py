@@ -1,5 +1,6 @@
 from flask import Flask, render_template, request, jsonify
 import random
+import re
 import time
 import json
 import pickle
@@ -110,7 +111,10 @@ def api_round(round_id):
 
 @app.route('/ring')
 def ring():
-    return render_template('ring.html')
+    emoji = json.load(open('static/js/emoji.json','rb'))['emojis']
+    pat = re.compile('food|animal|tool|music|sport|transport|place')
+    emoji = [e for e in emoji if pat.match(e['category'].lower())]
+    return render_template('ring.html',emoji=emoji)
 
 @app.route('/play/')
 def play_no_username():

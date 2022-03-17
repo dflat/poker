@@ -2,6 +2,11 @@ var onlongtouch;
 var timer;
 var touchduration = 100; //length of time we want the user to touch before we do something
 
+var cx_real;
+var cy_real;
+var column_touched;
+const start_angles = [Math.PI/2 - Math.PI/6, -Math.PI/6, -Math.PI/2 - Math.PI/6] 
+
 function touchstart(e) {
 
     if (!active_suit || e.touches.length > 1)
@@ -17,8 +22,11 @@ function touchstart(e) {
     var mx_cx = d - (MAX_R + px_in_em)
     var mx_cy = MAX_R + px_in_em
     //debug_info(mn_cx +' '+ touch.pageX +' '+ mx_cx)
-    cx = Math.min(mx_cx, Math.max(mn_cx, touch.pageX))
-    cy = Math.max(mx_cy, touch.pageY)
+    cx_real = touch.pageX
+    cy_real = touch.pageY
+    cx = Math.min(mx_cx, Math.max(mn_cx, cx_real))
+    cy = Math.max(mx_cy, cy_real)
+    column_touched = rescale(cx_real,mn=0,mx=w,a=0,b=2)
 
     //cards.forEach(draw_circle);
     intervalID = setInterval(resize_circle, 16);
@@ -438,6 +446,69 @@ function init_suit_nodes() {
 }
 
 
+//const emoji = ['0x1f366']
+//const emoji = code_points.map(cp => String.fromCodePoint(cp))
+var emoji;
+function load_emoji(emoji_from_server) {
+    emoji = emoji_from_server;
+}
+
+function get_random_emoji() {
+    var i = Math.floor(Math.random() * emoji.length)
+//    var rand_key = Object.keys(emoji)[i]
+    return emoji[i]['emoji']
+}
+
+function init_obscure_btn() {
+    var bar_height = Math.round(h/8) - 10
+    var quad_h = h/4
+    var bar_height = Math.round(h/16) - 10
+    var font_size = bar_height / 2
+
+    var container = document.createElement('div')
+    var text_node = document.createElement('a') 
+    container.classList.add('obscure-btn')
+    text_node.classList.add('obscure-btn-text')
+
+    text_node.style.fontSize = font_size + 'px' 
+    text_node.innerText = 'obscure/reveal'
+
+    container.style.position = 'absolute'
+    container.style.right = 0 + 'px' 
+    container.style.top = bar_height + 10 + 8 + quad_h + 'px'
+    container.style.width = w/2 +'px'
+    container.style.height = quad_h - bar_height - 10 - 8 + 'px'
+    //TODO eventlistener for random emoji obfuscation
+    container.addEventListener("touchstart", obscure_box_touched, false);
+    
+
+    container.appendChild(text_node)
+    document.body.appendChild(container)
+}
+
+var cards_obscured = false
+var hidden_cards_text = []
+function obscure_box_touched(e) {
+    e.preventDefault()
+    if (!cards_obscured) {
+        display_cards.forEach(card => {
+            var text_node = card.querySelector('a')
+            hidden_cards_text.push(text_node.innerText)
+            text_node.innerText = get_random_emoji()
+        });
+        cards_obscured = true
+    }
+    else {
+        display_cards.forEach(card => {
+            var text_node = card.querySelector('a')
+            var original_card_text = hidden_cards_text.shift()
+            text_node.innerText = original_card_text
+        });
+        cards_obscured = false
+    }
+
+}
+
 function init_status_bar() {
     var bar_height = Math.round(h/16) - 10
     var font_size = bar_height / 2
@@ -451,12 +522,14 @@ function init_status_bar() {
     name_node.classList.add('name-tag')
     name_node.classList.add('status-tag')
     name_node.style.fontSize = font_size + 'px' 
+    name_node.style.maxWidth = w/2 + 'px'
 
     round_node.classList.add('round-num-tag')
     round_node.classList.add('status-tag')
     round_node.style.fontSize = font_size + 'px' 
 
-    name_node.innerText = 'default_name'
+    var name = get('name') || 'default_name' + get_random_emoji()
+    name_node.innerText = name
     round_node.innerText = 'round # X'
 
     container.style.position = 'absolute'
@@ -540,6 +613,32 @@ function init_debug(){
 }
 
 /* ---- utility funcs */
+
+function toUTF16(codePoint) {
+  var TEN_BITS = parseInt('1111111111', 2);
+  function u(codeUnit) {
+    return '\\u'+codeUnit.toString(16).toUpperCase();
+  }
+
+  if (codePoint <= 0xFFFF) {
+    return u(codePoint);
+  }
+  codePoint -= 0x10000;
+
+  // Shift right to get to most significant 10 bits
+  var leadSurrogate = 0xD800 + (codePoint >> 10);
+
+  // Mask to get least significant 10 bits
+  var tailSurrogate = 0xDC00 + (codePoint & TEN_BITS);
+
+  return u(leadSurrogate) + u(tailSurrogate);
+}
+
+function get(name){
+   if(name=(new RegExp('[?&]'+encodeURIComponent(name)+'=([^&]*)')).exec(location.search))
+      return decodeURIComponent(name[1]);
+}
+
 function each(obj, fn) { Object.keys(obj).forEach(key => fn(key, obj[key])); }
 
 function rgb_to_hex(rgb_arr) {
@@ -580,6 +679,7 @@ document.addEventListener("DOMContentLoaded", function(event) {
     init_suit_nodes();
     init_canvas();
     init_status_bar();
+    init_obscure_btn();
     init_card_display_node(0) // to display two chosen cards
     init_card_display_node(1)
 

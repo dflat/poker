@@ -95,6 +95,15 @@ div{
     margin-left:20px;
     background:#ddd;
     font-style: italic;
+    overflow:hidden;
+}
+
+.obscure-btn {
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    background:#ddd;
+    opacity:.1;
 }
 
 .round-num-tag {
