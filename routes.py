@@ -100,6 +100,16 @@ def api_hand():
     print(user, card_a, card_b, ts)
     return 'successfully sent ajax request...'
 
+@app.route('/api/round/current')
+def api_current_round():
+    db = get_db()
+    current_round_id = db.get('current_round_id')
+    round_data = db['rounds'][current_round_id]
+    result = { }
+    result['players'] = {username:hand.to_dict() for username,hand in round_data.items()}
+    result['round_id'] = current_round_id
+    return jsonify(result)
+
 @app.route('/api/round/<int:round_id>')
 def api_round(round_id):
     db = get_db()
@@ -110,11 +120,21 @@ def api_round(round_id):
     return jsonify({username:hand.to_dict() for username,hand in round_data.items()})
 
 @app.route('/ring')
-def ring():
+def ring_no_user():
+    return ring(user=None)
+
+@app.route('/ring/<user>')
+def ring(user):
+    print('got user in flask', user)
+    db = get_db()
+    round_id = db['current_round_id']
+
     emoji = json.load(open('static/js/emoji.json','rb'))['emojis']
-    pat = re.compile('food|animal|tool|music|sport|transport|place')
+    pat = re.compile('.*(food|animal|music|clothing)')
     emoji = [e for e in emoji if pat.match(e['category'].lower())]
-    return render_template('ring.html',emoji=emoji)
+
+    #request.args.set('user', user)
+    return render_template('ring.html', round_id=round_id, username=user, emoji=emoji)
 
 @app.route('/play/')
 def play_no_username():

@@ -8,6 +8,8 @@ var column_touched;
 const start_angles = [Math.PI/2 - Math.PI/6, -Math.PI/6, -Math.PI/2 - Math.PI/6] 
 
 function touchstart(e) {
+    // TODO :make this into a dispatcher for all touches, so can check # of touches
+    // and limit it to one... use ''this'' object to select which sub-handler to call
 
     if (!active_suit || e.touches.length > 1)
         return
@@ -36,6 +38,8 @@ function touchstart(e) {
 
 function card_display_box_touched(e) {
     e.preventDefault()
+    if (cards_obscured)
+        return
     const i = this.index
     current_display_card_index = i
     clear_selected_card()
@@ -134,11 +138,11 @@ var N = CARD_VALS.length;
 function init_card_nodes() {
     CARD_VALS.forEach((card) => {
         var node = document.createElement('div');
-        node.style.fontSize = '2em';
+        node.style.fontSize = '1.5em';
         node.t = 0; //TODO should this be here?
         var anchor = document.createElement('a');
         anchor.text = card;
-        anchor.style.fontSize = '2em';
+        anchor.style.fontSize = '1.5em';
         node.appendChild(anchor);
         node.id = card;
         node.style.position = 'absolute';
@@ -174,11 +178,13 @@ function touchend(e) {
     }
 
     reset_suit_nodes()
+
+    if (Object.keys(hand).length == 2)
+        post_hand(username, hand)
+    
     var msg = []
-//    hand.forEach(card => msg.push(card[0]+suit_unicode[card[1]]))
     each(hand, (i,card) => msg.push(card[0]+suit_unicode[card[1]]))
     debug_info('cards in hand: ' + msg.join(', '))
-//    debug_info('cards in hand:'+hand[0][0]+hand[0][1]+', '+hand[1][0]+hand[1][1])
 
 }
 
@@ -187,6 +193,13 @@ function update_hand_state() {
     var ix = current_display_card_index
     var card = display_cards[ix]
     hand[ix] = [card.value, card.suit]
+}
+
+function get_card_text_from_hand(i) {
+    console.log(hand)
+    console.log(i)
+    var card = hand[i]
+    return card.value + ''+suit_unicode[card.suit]
 }
 
 function advance_display_card_index(){
@@ -211,13 +224,12 @@ var card_select_start = null;
 var select_interval_id;
 function draw_sector(px,py) {
     // TODO -- expand radius proportional to thumb distance from circle center
-    // -- delete selected display card when tapped
     // -- easing functions, little overshoot-springy effects (if bored...)
     if (!active_suit)
         return
-    var vx = px - cx;
-    var vy = py - cy;
-    var phi = Math.atan2(--vy,--vx); // inverted angle in (-pi,pi)
+    var vx = px - cx_real; //TODO this is experimental .. switch back to cx, cy
+    var vy = py - cy_real;
+    var phi = Math.atan2(--vy,--vx); // inverted angle in (-pi,pi) for selection
     if (phi > Math.PI/2)
         phi = -Math.PI + (phi-Math.PI)
 
@@ -279,7 +291,6 @@ function draw_sector(px,py) {
 
     prev_selected_card = selected_card
 
-    // draw suit in center TODO
 
 }
 
@@ -355,10 +366,10 @@ function init_canvas() {
     plane.classList.add('lock-screen');
 }
 
-const suit_unicode = {heart:'\u2665', diamond:'\u2666', spade:'\u2660', club:'\u2663'};
 var suit_nodes = [];
-const suits = ['heart','diamond','spade','club']
-const suit_codes = {'heart':0,'diamond':1,'spade':2,'club':3}
+const suits = ['hearts','diamonds','spades','clubs']
+const suit_codes = {'hearts':0,'diamonds':1,'spades':2,'clubs':3}
+const suit_unicode = {hearts:'\u2665', diamonds:'\u2666', spades:'\u2660', clubs:'\u2663'};
 var active_suit = null;
 var SUIT_SELECTED_CLS = 'selected-suit'
 
@@ -383,7 +394,7 @@ function reset_suit_size(node){
 
 var suit_box_touched_interval_id;
 function suit_box_touched(e) {
-    if (e.touches.length > 1)
+    if (e.touches.length > 1 || cards_obscured)
         return
     e.preventDefault()
     suit_box_touched_interval_id = setInterval(modulate_suit_size, 16, this)
@@ -405,22 +416,20 @@ function modulate_suit_size(suit_box) {
 var suit_symbol_size_px;
 var suit_default_opacity;
 const suit_colors = ['#ec2c30', '#1843d7', '#404241', '#1f8a59']
-const suit_colors_dark = [ '#ec2c30', //heart
+const suit_colors_dark = [ '#ec2c30', //hearts
                            '#1843d7', //diam
-                            '#0a1527', //spade
-                           '#1f8a59'] //club
-                           //rgb_to_hex([143, 46, 76]), //heart '#D16D8C'
-                           //rgb_to_hex([114, 50, 170]), //diam
-                           //rgb_to_hex([38, 38, 38]), //spade'#404241'
-                           //rgb_to_hex([79, 151, 87]) ] //club
+                            '#0a1527', //spades
+                           '#1f8a59'] //clubs
 
 function init_suit_nodes() {
     var i = 0
     var w = window.innerWidth
     var h = window.innerHeight
-    var quad_w = w/2
-    var quad_h = h/4
+    var left_edge = 2*w/8
+    var quad_w = w/2 - left_edge
+    var quad_h = quad_w//h/4
     var font_size = quad_w/2
+    suit_symbol_size_px = font_size
     suits.forEach((suit,i) => {
 
         var container = document.createElement('div')
@@ -434,7 +443,7 @@ function init_suit_nodes() {
         container.data = suit
         container.suit = suit
         container.style.position = 'absolute'
-        container.style.left = (i%2) * quad_w + 'px'
+        container.style.left = left_edge + (i%2) * quad_w + 'px'
         container.style.bottom = (Math.trunc(i/2) %2) * quad_h + 'px'
         container.style.width = quad_w +'px'
         container.style.height = quad_h + 'px'
@@ -448,10 +457,20 @@ function init_suit_nodes() {
 
 //const emoji = ['0x1f366']
 //const emoji = code_points.map(cp => String.fromCodePoint(cp))
+
+/* --- functions to load data from server */
 var emoji;
 function load_emoji(emoji_from_server) {
     emoji = emoji_from_server;
 }
+
+var data_from_server = {};
+var round_id = -1;
+function load_data_from_server(attr, val) {
+    console.log('got from server: ' + attr + ':' + val)
+    data_from_server[attr] = val;
+}
+/* --- end functions to load data from server */
 
 function get_random_emoji() {
     var i = Math.floor(Math.random() * emoji.length)
@@ -463,7 +482,9 @@ function init_obscure_btn() {
     var bar_height = Math.round(h/8) - 10
     var quad_h = h/4
     var bar_height = Math.round(h/16) - 10
-    var font_size = bar_height / 2
+    var container_width = w/4
+    //var font_size = bar_height / 2
+    var font_size = container_width / 2
 
     var container = document.createElement('div')
     var text_node = document.createElement('a') 
@@ -471,14 +492,17 @@ function init_obscure_btn() {
     text_node.classList.add('obscure-btn-text')
 
     text_node.style.fontSize = font_size + 'px' 
-    text_node.innerText = 'obscure/reveal'
+    var glasses = query_emoji(emoji,
+                                (x) => x['name'].toLowerCase().includes('sunglasses'))
+    text_node.innerText = glasses //'obscure/reveal'
 
     container.style.position = 'absolute'
     container.style.right = 0 + 'px' 
-    container.style.top = bar_height + 10 + 8 + quad_h + 'px'
-    container.style.width = w/2 +'px'
-    container.style.height = quad_h - bar_height - 10 - 8 + 'px'
-    //TODO eventlistener for random emoji obfuscation
+//    container.style.top = bar_height + 10 + 8 + quad_h + 'px'
+    container.style.bottom = 0 + 'px'//bar_height + 10 + 8 + quad_h + 'px'
+    container.style.width = container_width +'px'
+    container.style.height = container_width + 'px'//quad_h - bar_height - 10 - 8 + 'px'
+
     container.addEventListener("touchstart", obscure_box_touched, false);
     
 
@@ -490,7 +514,12 @@ var cards_obscured = false
 var hidden_cards_text = []
 function obscure_box_touched(e) {
     e.preventDefault()
-    if (!cards_obscured) {
+    if (e.touches.length > 1)
+        return
+    //TODO toggle class for opacity on sunglasses
+    if (!cards_obscured) { // obscure cards in display box
+        //this.style.opacity = 1
+        this.classList.add('obscure-on')
         display_cards.forEach(card => {
             var text_node = card.querySelector('a')
             hidden_cards_text.push(text_node.innerText)
@@ -498,24 +527,31 @@ function obscure_box_touched(e) {
         });
         cards_obscured = true
     }
-    else {
-        display_cards.forEach(card => {
+    else { // reveal cards in display box
+        this.classList.remove('obscure-on')
+        //this.style.opacity = 0.2
+        display_cards.forEach((card,i) => {
             var text_node = card.querySelector('a')
             var original_card_text = hidden_cards_text.shift()
             text_node.innerText = original_card_text
+            //if (i in hand)
+            //    text_node.innerText = 'x'//get_card_text_from_hand(i)
         });
         cards_obscured = false
     }
 
 }
 
+
+var username;
+var round_node;
 function init_status_bar() {
     var bar_height = Math.round(h/16) - 10
     var font_size = bar_height / 2
 
     var container = document.createElement('div')
     var name_node = document.createElement('a') 
-    var round_node = document.createElement('a') 
+    round_node = document.createElement('a') 
 
     container.classList.add('status-bar')
 
@@ -528,9 +564,13 @@ function init_status_bar() {
     round_node.classList.add('status-tag')
     round_node.style.fontSize = font_size + 'px' 
 
-    var name = get('name') || 'default_name' + get_random_emoji()
-    name_node.innerText = name
-    round_node.innerText = 'round # X'
+    console.log('data_from_server: '+ data_from_server['username'])
+
+    username = data_from_server['username'] || get('name') ||
+                        'default_name' + get_random_emoji()
+
+    name_node.innerText = username
+    round_node.innerText = 'round # ' + data_from_server['round_id']
 
     container.style.position = 'absolute'
     container.style.left = 0 + 'px' 
@@ -541,6 +581,42 @@ function init_status_bar() {
     container.appendChild(name_node)
     container.appendChild(round_node)
     document.body.appendChild(container)
+}
+
+var other_players_box;
+function init_other_players_box() {
+    const box_top_offset = h/16 + h/4 + 10 
+    var container = document.createElement('div')
+    container.classList.add('other-players-box')
+    container.style.position = 'absolute'
+    container.style.top = box_top_offset + 'px'
+    container.style.left = 0 + 'px'
+    container.style.width = w + 'px'
+    container.style.minHeight = h/8 + 'px'
+    container.style.maxHeight = 2*h/8 + 'px'
+
+    document.body.appendChild(container)
+    other_players_box = container
+}
+
+var active_players = { }
+function add_other_players_hand(username) {
+    var div = document.createElement('div')
+    var anchor = document.createElement('a')
+    div.classList.add('other-player-hand-container')
+    anchor.classList.add('other-player-hand-text') 
+    anchor.innerText = username
+    div.appendChild(anchor)
+    other_players_box.appendChild(div)
+    active_players[username] = div
+}
+
+function cull_player(username) {
+   console.log('cleared player')
+   node = active_players[username]
+   node.remove()
+   delete active_players[username]
+   console.log(active_players)
 }
 
 /*
@@ -593,6 +669,10 @@ function init_card_display_node(i) {
 
 }
 
+function update_round_node(i) {
+    round_node.innerText = 'round # ' + i
+}
+
 var hand = { };
 var debug_node;
 var debug_msg = '';
@@ -613,6 +693,73 @@ function init_debug(){
 }
 
 /* ---- utility funcs */
+
+
+const API_ENDPOINT = '/api/hand'
+
+function post_hand(user, hand) {
+  console.log('posted hand for:'+user)
+  var card_a = hand[0][0] + '_' + hand[0][1]
+  var card_b = hand[1][0] + '_' + hand[1][1]
+  query = `?user=${user}&card_a=${card_a}&card_b=${card_b}`;
+  url = API_ENDPOINT + query;
+  ajax_request(url, ajax_request_done);
+}
+
+function get_round_data() {
+    const endpoint = '/api/round/current'
+    ajax_request(endpoint, process_round_data) 
+}
+
+function process_round_data(xhr) {
+    var data = JSON.parse(xhr.response)
+    var keys = Object.keys(data)
+    if (keys.length == 0)
+        return
+    console.log(data['round_id'])
+    update_round_node(data['round_id'])
+    
+    var players = data['players']
+    for (var username in players) {
+        var player_info = players[username]
+        // add new players to the round
+        if (!(username in active_players)) {
+            add_other_players_hand(username)
+        }
+    }
+    //cull old players from prev round
+    for (player in active_players) {
+        if (!(player in players)) {
+            cull_player(player)
+        }
+    }
+}
+
+function ajax_request(url, callback){
+    var xhr = new XMLHttpRequest();
+    xhr.onloadend = function(e){
+        callback(xhr);
+    };
+    xhr.open('GET', url);
+    xhr.send();
+}
+
+function ajax_request_done(data) {
+    console.log('ajax request finished')
+    console.log(data);
+}
+
+
+function query_emoji(arr, pred) {
+    var matches = []
+    arr.forEach(item => {
+        if (pred(item))
+            matches.push(item)
+    });
+    if (matches.length == 0)
+        return null
+    return matches[0]['emoji']
+}
 
 function toUTF16(codePoint) {
   var TEN_BITS = parseInt('1111111111', 2);
@@ -664,7 +811,7 @@ function update_dimensions() {
     w = window.innerWidth
     h = window.innerHeight
     d = Math.min(window.innerWidth, window.innerHeight);
-    MAX_R = Math.round((.9)*d/2)
+    MAX_R = Math.round((.7)*d/2)
 }
 
 document.addEventListener("DOMContentLoaded", function(event) {
@@ -679,12 +826,13 @@ document.addEventListener("DOMContentLoaded", function(event) {
     init_suit_nodes();
     init_canvas();
     init_status_bar();
+    init_other_players_box()
     init_obscure_btn();
     init_card_display_node(0) // to display two chosen cards
     init_card_display_node(1)
 
     px_in_em = get_px_in_em(cards[0])
-    suit_symbol_size_px = window.innerWidth/4;
+    //suit_symbol_size_px = window.innerWidth/4;
     suit_default_opacity = 0.2;
     show_suit_choices();  
 
@@ -693,6 +841,8 @@ document.addEventListener("DOMContentLoaded", function(event) {
     window.addEventListener("touchmove", touchmove, false);
     window.addEventListener("touchmove", touchmove, false);
    // document.body.addEventListener("touchmove", touchmove, false);
+
+    const get_round_data_interval_id = setInterval(get_round_data, 1000)
 
 });
 

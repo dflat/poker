@@ -4,7 +4,10 @@
 <script type="text/javascript" src ="{{ url_for('static', filename = 'js/ring.js') }}">
 </script>
 <script type="text/javascript">
-            emojicon = load_emoji({{emoji|tojson}})
+            emojicon = load_emoji({{emoji|tojson}});
+            console.log({{username|tojson}})
+            round_id = load_data_from_server('round_id', {{round_id}});
+            username_ = load_data_from_server('username', {{username|tojson}});
 </script>
 
 <div>
