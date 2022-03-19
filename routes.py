@@ -5,6 +5,7 @@ import time
 import json
 import pickle
 from collections import defaultdict
+import db
 
 DB_PATH = 'static/data/db.pickle'
 

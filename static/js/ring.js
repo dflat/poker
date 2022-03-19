@@ -586,12 +586,13 @@ function init_status_bar() {
 var other_players_box;
 function init_other_players_box() {
     const box_top_offset = h/16 + h/4 + 10 
+    const box_padding = 10
     var container = document.createElement('div')
     container.classList.add('other-players-box')
     container.style.position = 'absolute'
     container.style.top = box_top_offset + 'px'
-    container.style.left = 0 + 'px'
-    container.style.width = w + 'px'
+    container.style.left = box_padding + 'px'
+    container.style.width = w - box_padding*2 + 'px'
     container.style.minHeight = h/8 + 'px'
     container.style.maxHeight = 2*h/8 + 'px'
 
