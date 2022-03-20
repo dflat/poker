@@ -116,9 +116,8 @@ div{
 }
 
 .obscure-btn-text {
-    opacity:.1
+    opacity:.1;
 }
-
 
 .obscure-on a{
     opacity:1;
@@ -129,6 +128,18 @@ div{
 .obscure-on {
 
 }
+
+.fold-btn {
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    background:rgba(221,221,221,.1);/*#ddd;*/
+}
+
+.fold-btn-text {
+    opacity:0.5;
+}
+
 
 .round-num-tag {
     margin-right:20px;
@@ -154,6 +165,7 @@ div{
     overflow:scroll;
 
     background:var(--green-felt);/*2195cb;*/
+    /*background:var(--grey-trans);*/
     background-image:var(--felt-img);
 }
 
@@ -166,7 +178,10 @@ div{
 }
 
 .other-player-hand-text {
-    font-style:italic;
+    /*font-style:italic;*/
+    /*font-size:1.5em;*/
+    font-size-adjust:.78;/*1.5em;*/
+    
 }
 
 canvas#plane{

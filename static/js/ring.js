@@ -465,7 +465,8 @@ function load_emoji(emoji_from_server) {
 }
 
 var data_from_server = {};
-var round_id = -1;
+//var round_id = -1;
+//var round_no = 0;
 function load_data_from_server(attr, val) {
     console.log('got from server: ' + attr + ':' + val)
     data_from_server[attr] = val;
@@ -478,12 +479,43 @@ function get_random_emoji() {
     return emoji[i]['emoji']
 }
 
+var fold_text_node;
+function init_fold_btn() {
+    var bar_height = Math.round(h/8) - 10
+    var quad_h = h/4
+    var bar_height = Math.round(h/16) - 10
+    var container_width = w/4
+    var font_size = container_width / 4
+
+    var container = document.createElement('div')
+    var text_node = document.createElement('a') 
+    fold_text_node = text_node
+
+    container.classList.add('fold-btn')
+    text_node.classList.add('fold-btn-text')
+
+    text_node.style.fontSize = font_size + 'px' 
+    var glasses = query_emoji(emoji,
+                                (x) => x['name'].toLowerCase().includes('sunglasses'))
+    text_node.innerText = "fold" //glasses //'obscure/reveal'
+
+    container.style.position = 'absolute'
+    container.style.left = 0 + 'px' 
+    container.style.bottom = 0 + 'px'//bar_height + 10 + 8 + quad_h + 'px'
+    container.style.width = container_width +'px'
+    container.style.height = container_width + 'px'//quad_h - bar_height - 10 - 8 + 'px'
+
+    container.addEventListener("touchstart", fold_box_touched, false);
+
+    container.appendChild(text_node)
+    document.body.appendChild(container)
+}
+
 function init_obscure_btn() {
     var bar_height = Math.round(h/8) - 10
     var quad_h = h/4
     var bar_height = Math.round(h/16) - 10
     var container_width = w/4
-    //var font_size = bar_height / 2
     var font_size = container_width / 2
 
     var container = document.createElement('div')
@@ -498,25 +530,53 @@ function init_obscure_btn() {
 
     container.style.position = 'absolute'
     container.style.right = 0 + 'px' 
-//    container.style.top = bar_height + 10 + 8 + quad_h + 'px'
     container.style.bottom = 0 + 'px'//bar_height + 10 + 8 + quad_h + 'px'
     container.style.width = container_width +'px'
     container.style.height = container_width + 'px'//quad_h - bar_height - 10 - 8 + 'px'
 
     container.addEventListener("touchstart", obscure_box_touched, false);
-    
 
     container.appendChild(text_node)
     document.body.appendChild(container)
 }
 
+function fold_box_touched(e) {
+    e.preventDefault()
+    if (e.touches.length > 1)
+        return
+    fold_hand(username)
+    var text_node = this.querySelector('a')
+    text_node.innerText = 'folded' //TODO reset text back to fold on new round start
+}
+
 var cards_obscured = false
 var hidden_cards_text = []
+
+function obscure_cards(btn) {
+    btn.classList.add('obscure-on')
+    display_cards.forEach(card => {
+        var text_node = card.querySelector('a')
+        hidden_cards_text.push(text_node.innerText)
+        text_node.innerText = get_random_emoji()
+    });
+    cards_obscured = true
+}
+
+function un_obscure_cards(btn) {
+    btn.classList.remove('obscure-on')
+    display_cards.forEach((card,i) => {
+        var text_node = card.querySelector('a')
+        var original_card_text = hidden_cards_text.shift()
+        text_node.innerText = original_card_text
+    });
+    cards_obscured = false
+}
+
 function obscure_box_touched(e) {
     e.preventDefault()
     if (e.touches.length > 1)
         return
-    //TODO toggle class for opacity on sunglasses
+
     if (!cards_obscured) { // obscure cards in display box
         //this.style.opacity = 1
         this.classList.add('obscure-on')
@@ -529,13 +589,10 @@ function obscure_box_touched(e) {
     }
     else { // reveal cards in display box
         this.classList.remove('obscure-on')
-        //this.style.opacity = 0.2
         display_cards.forEach((card,i) => {
             var text_node = card.querySelector('a')
             var original_card_text = hidden_cards_text.shift()
             text_node.innerText = original_card_text
-            //if (i in hand)
-            //    text_node.innerText = 'x'//get_card_text_from_hand(i)
         });
         cards_obscured = false
     }
@@ -570,7 +627,7 @@ function init_status_bar() {
                         'default_name' + get_random_emoji()
 
     name_node.innerText = username
-    round_node.innerText = 'round # ' + data_from_server['round_id']
+    round_node.innerText = 'round # ' + data_from_server['round_no']
 
     container.style.position = 'absolute'
     container.style.left = 0 + 'px' 
@@ -601,12 +658,12 @@ function init_other_players_box() {
 }
 
 var active_players = { }
-function add_other_players_hand(username) {
+function add_other_players_hand(username, emoji) {
     var div = document.createElement('div')
     var anchor = document.createElement('a')
     div.classList.add('other-player-hand-container')
     anchor.classList.add('other-player-hand-text') 
-    anchor.innerText = username
+    anchor.innerText = username // + (emoji || '')
     div.appendChild(anchor)
     other_players_box.appendChild(div)
     active_players[username] = div
@@ -670,8 +727,24 @@ function init_card_display_node(i) {
 
 }
 
+var round_no; // = 0;
 function update_round_node(i) {
     round_node.innerText = 'round # ' + i
+    // advanced to new round
+    if (round_no != undefined && i > round_no) {
+        clean_slate_for_new_round()
+    }
+    round_no = i
+}
+
+function clean_slate_for_new_round() {
+    fold_text_node.innerText = 'fold'
+    for (let i = 0; i < 2 ; i++) {
+        var j = 1-i // for some reason there's no i-- in javascript I guess
+        current_display_card_index = j
+        clear_selected_card()
+        remove_card_from_hand(j)
+    }
 }
 
 var hand = { };
@@ -698,12 +771,22 @@ function init_debug(){
 
 const API_ENDPOINT = '/api/hand'
 
+function fold_hand(user) {
+    const endpoint = '/api/hand/fold'
+    query = `?user=${user}`;
+    var url = endpoint + query
+    ajax_request(url, fold_hand_done);
+}
+
+function fold_hand_done() {
+}
+
 function post_hand(user, hand) {
   console.log('posted hand for:'+user)
   var card_a = hand[0][0] + '_' + hand[0][1]
   var card_b = hand[1][0] + '_' + hand[1][1]
   query = `?user=${user}&card_a=${card_a}&card_b=${card_b}`;
-  url = API_ENDPOINT + query;
+  var url = API_ENDPOINT + query;
   ajax_request(url, ajax_request_done);
 }
 
@@ -717,15 +800,20 @@ function process_round_data(xhr) {
     var keys = Object.keys(data)
     if (keys.length == 0)
         return
-    console.log(data['round_id'])
-    update_round_node(data['round_id'])
+    console.log(data['round_no'])
+    update_round_node(data['round_no'])
     
     var players = data['players']
     for (var username in players) {
         var player_info = players[username]
         // add new players to the round
         if (!(username in active_players)) {
-            add_other_players_hand(username)
+            add_other_players_hand(username, player_info['emoji'])
+        }
+        // remove folded players from the round
+        if (player_info.folded == 1) {
+            console.log(username + ' folded')
+            cull_player(username);
         }
     }
     //cull old players from prev round
@@ -829,6 +917,7 @@ document.addEventListener("DOMContentLoaded", function(event) {
     init_status_bar();
     init_other_players_box()
     init_obscure_btn();
+    init_fold_btn();
     init_card_display_node(0) // to display two chosen cards
     init_card_display_node(1)
 

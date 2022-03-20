@@ -28,6 +28,21 @@ div#status-bar {
    background:#eee;
 }
 
+.folded-container {
+    align-content: center;
+    display: flex;
+    align-items: center;
+    font-style: italic;
+    padding-left: 2em;
+    padding-right: 3em;
+    font-size: 1em;
+    justify-content:space-around;
+    background:#ddd;
+}
+
+.folded-tag {
+    /*font-size:2em;*/
+}
 
 a.user-tag {
     font-size: 2em;
@@ -69,6 +84,9 @@ a.user-tag {
     background: #66666b;
     border-top-left-radius: .5em;
     border-bottom-left-radius: .5em;
+}
+.user-container a {
+    color: white;
 }
     
 .obscure-view {

@@ -5,13 +5,20 @@
           <div class="user-container">
             <a class="user-tag">{{user}}</a>
           </div>
-          {% for card in [hand.card_a, hand.card_b] %}
+
+          {% for card in [hand['high_card'], hand['low_card']] %}
           <div class="card-cell hand-card-cell" onclick="void(0)">
-            <a class="card {{card.suit}}" data="{{card.value}}_{{card.suit}}">
-                    {{card.value}}{{card.suit_unicode}}
+            <a class="card {{card['suit']}}" data="{{card['value']}}_{{card['suit']}}">
+                    {{card['display_text']}}
             </a>
           </div>
           {% endfor %} 
+
+          {% if hand['folded'] %}
+          <div class="folded-container">
+            <a class="folded-tag">folded</a>
+          </div>
+          {% endif %}
       </div>
       {% endfor %} 
     </div> <!-- end #card-grid -->
