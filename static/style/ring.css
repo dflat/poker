@@ -148,24 +148,17 @@ div{
 
 .other-players-box {
     font-size:1.5em;
-    /*
-    background: rgba(100,100,100,.1);
-    background: rgba(20,141,80,0.8);
-    */
     border-top:solid 4px #999;
     border-top:solid 4px var(--green-felt);
-    /*border-bottom:dotted 2px #aaa;*/
     border-bottom:solid 4px var(--green-felt);
     display: flex;
     padding-top:.1em;
     padding-bottom:.1em;
     align-items:center;
-    /*justify-content:space-between;*/
     justify-content:space-evenly;
     overflow:scroll;
 
     background:var(--green-felt);/*2195cb;*/
-    /*background:var(--grey-trans);*/
     background-image:var(--felt-img);
 }
 
@@ -182,6 +175,32 @@ div{
     /*font-size:1.5em;*/
     font-size-adjust:.78;/*1.5em;*/
     
+}
+
+.drag-to-advance-round-box {
+    font-size:4em;
+/*    border-top:solid 4px #999;
+    border-top:solid 4px var(--green-felt);
+    border-bottom:solid 4px var(--green-felt);
+ */   display: flex;
+    padding-top:.1em;
+    padding-bottom:.1em;
+    align-items:center;
+    justify-content:space-evenly;
+
+}
+
+.drag-to-advance-text {
+    color:#333;
+    font-style:italic;
+}
+
+.animate-drag-bar-offscreen {
+    /*position:absolute;
+    left:0px;*/
+/*    right: 0px!important;*/
+    -webkit-transition: all 0.2s ease-in-out;
+    -moz-transition: all 0.2s ease-in-out;
 }
 
 canvas#plane{

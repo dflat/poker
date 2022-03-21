@@ -10,22 +10,21 @@ const start_angles = [Math.PI/2 - Math.PI/6, -Math.PI/6, -Math.PI/2 - Math.PI/6]
 function touchstart(e) {
     // TODO :make this into a dispatcher for all touches, so can check # of touches
     // and limit it to one... use ''this'' object to select which sub-handler to call
+    var touch = e.touches[0];
+    touch_start_time = Date.now(); 
+    cx_real = touch.pageX
+    cy_real = touch.pageY
 
     if (!active_suit || e.touches.length > 1)
         return
     debug_info('touches:'+e.touches.length)
     e.preventDefault();
-    touch_start_time = Date.now(); 
-    var touch = e.touches[0];
     var card_node = cards[0];
     var w = card_node.clientWidth;
     var h = card_node.clientHeight;
     var mn_cx = MAX_R + px_in_em
     var mx_cx = d - (MAX_R + px_in_em)
     var mx_cy = MAX_R + px_in_em
-    //debug_info(mn_cx +' '+ touch.pageX +' '+ mx_cx)
-    cx_real = touch.pageX
-    cy_real = touch.pageY
     cx = Math.min(mx_cx, Math.max(mn_cx, cx_real))
     cy = Math.max(mx_cy, cy_real)
     column_touched = rescale(cx_real,mn=0,mx=w,a=0,b=2)
@@ -34,6 +33,20 @@ function touchstart(e) {
     intervalID = setInterval(resize_circle, 16);
 
     timer = setTimeout(onlongtouch, touchduration); 
+}
+
+var other_player_box_touch_down = { }
+function other_players_box_touched(e) {
+    var touch
+    e.preventDefault()
+    touch = e.touches[0]
+    other_player_box_touch_down.triggered = false
+    other_player_box_touch_down.t0 = Date.now()
+    other_player_box_touch_down.x0 = touch.pageX
+    other_player_box_touch_down.y0 = touch.pageY
+    if (other_player_box_touch_down.x0 > w/2) 
+        other_player_box_touch_down.triggered = true
+
 }
 
 function card_display_box_touched(e) {
@@ -158,7 +171,19 @@ function hide_card_nodes() {
         c.style.top = '-100px';
     });
 }
+
+function allow_drag_to_advance_round() {
+    advance_triggered = false // ending the touch allows another round advance to begin
+}
+
+var last_touchend;
 function touchend(e) {
+    // handle half completed round advance drag
+    if (drag_to_advance_round_started && !advance_triggered){
+       reset_drag_to_advance_bar() 
+    }
+    allow_drag_to_advance_round()
+    //touchdown = false
 
     var ctx = plane.getContext('2d');
     ctx.clearRect(0,0,plane.width,plane.height);
@@ -179,14 +204,24 @@ function touchend(e) {
 
     reset_suit_nodes()
 
-    if (Object.keys(hand).length == 2)
+    // post hand if player-felt isn't what was just touched
+    if (Object.keys(hand).length == 2 && e.target.className != "other-players-box") {
         post_hand(username, hand)
-    
-    var msg = []
-    each(hand, (i,card) => msg.push(card[0]+suit_unicode[card[1]]))
-    debug_info('cards in hand: ' + msg.join(', '))
+    }
+        // && e.target.className == "suit-box")
+
+    // check for swipe, to vote to advance the round
+    if (e.target.className == "other-players-box") {
+        var x = e.changedTouches[0].pageX
+        if (other_player_box_touch_down.triggered
+            && Date.now() - other_player_box_touch_down.t0 < 1000
+            && other_player_box_touch_down.x0 - x > w/8) {
+            //vote_to_advance_round()
+        }
+    }
 
 }
+
 
 var MAX_HAND_SIZE = 2;
 function update_hand_state() {
@@ -339,7 +374,65 @@ function check_held_time(card_select_start, selected_card, prev_selected_card) {
     }
 }
 
+var drag_to_advance_bar;
+function init_drag_to_advance_bar() {
+    var container = document.createElement('div')
+    var node = document.createElement('a') 
+    drag_to_advance_bar = container
+
+    container.classList.add('drag-to-advance-round-box')
+    node.classList.add('drag-to-advance-text')
+    container.style.position = 'absolute'
+    container.style.top = other_players_box.style.top //+ 'px'
+    container.style.left = w + 1 + 'px'
+    container.style.width = w/4 +'px'  //w - box_padding*2 + 'px'
+//    container.style.height = h + 'px'
+    container.style.minHeight = other_players_box.style.minHeight //h/8 + 'px'
+    container.style.maxHeight = other_players_box.style.maxHeight //2*h/8 + 'px'
+
+    node.innerText = 'go to next round...'//'...'
+
+    container.appendChild(node)
+    document.body.appendChild(container)
+}
+
+var advance_triggered = false
+var drag_to_advance_round_started = false
+function drag_bar_to_advance_round(event) {
+    if (advance_triggered)
+        return
+    drag_to_advance_round_started = true
+    var touch = event.touches[0]
+    var px = touch.pageX
+    var py = touch.pageY
+    var vx = px - cx_real
+    var vy = py - cy_real
+
+    var trigger_at_dx = w/2
+    var dx = clamp(-vx, mn=0, mx=trigger_at_dx);
+    var L = rescale(dx, mn=0, mx=trigger_at_dx, a=0, b=1)
+    
+    const max_shift = w/4
+    drag_to_advance_bar.style.left = w - (L*max_shift)+'px'//w - L*w + 'px'//px + 'px'
+    drag_to_advance_bar.style.background = `rgba(204,204,204,${L})`
+    drag_to_advance_bar.style.opacity = L;
+    other_players_box.style.left = L*(-w/2) + 'px'
+   
+    debug_info(px)
+    if (-vx > w/2 && !advance_triggered) { //&& !touchdown) {
+        advance_triggered = true
+//        other_players_box.classList.add('animate-drag-bar-offscreen')
+        vote_to_advance_round()
+    }
+
+}
+
+//var touchdown = false
 function touchmove(event) {
+    //touchdown = true
+    if (event.target.className == "other-players-box") {
+        drag_bar_to_advance_round(event)
+    }
     var touch = event.touches[0];
     px = touch.pageX;
     py = touch.pageY;
@@ -421,6 +514,7 @@ const suit_colors_dark = [ '#ec2c30', //hearts
                             '#0a1527', //spades
                            '#1f8a59'] //clubs
 
+var main_suit_boxes = {}
 function init_suit_nodes() {
     var i = 0
     var w = window.innerWidth
@@ -434,6 +528,10 @@ function init_suit_nodes() {
 
         var container = document.createElement('div')
         var node = document.createElement('a') 
+
+        container.name = 'suit_box_'+suit
+        main_suit_boxes[container.name] = container
+
         node.style.fontSize = font_size + 'px' //font_size + 'em'
         //node.style.position = 'absolute' // no ...center in the div...
         node.innerText = suit_unicode[suit]
@@ -511,6 +609,7 @@ function init_fold_btn() {
     document.body.appendChild(container)
 }
 
+var obscure_card_btn;
 function init_obscure_btn() {
     var bar_height = Math.round(h/8) - 10
     var quad_h = h/4
@@ -519,6 +618,7 @@ function init_obscure_btn() {
     var font_size = container_width / 2
 
     var container = document.createElement('div')
+    obscure_card_btn = container
     var text_node = document.createElement('a') 
     container.classList.add('obscure-btn')
     text_node.classList.add('obscure-btn-text')
@@ -540,20 +640,23 @@ function init_obscure_btn() {
     document.body.appendChild(container)
 }
 
+var folded = false; //TODO: use this to allow unfolding
 function fold_box_touched(e) {
     e.preventDefault()
     if (e.touches.length > 1)
         return
+    if (Object.keys(hand).length < 2)
+        return
     fold_hand(username)
     var text_node = this.querySelector('a')
-    text_node.innerText = 'folded' //TODO reset text back to fold on new round start
+    text_node.innerText = 'folded'
 }
 
 var cards_obscured = false
 var hidden_cards_text = []
 
-function obscure_cards(btn) {
-    btn.classList.add('obscure-on')
+function obscure_cards() {
+    obscure_card_btn.classList.add('obscure-on')
     display_cards.forEach(card => {
         var text_node = card.querySelector('a')
         hidden_cards_text.push(text_node.innerText)
@@ -562,8 +665,8 @@ function obscure_cards(btn) {
     cards_obscured = true
 }
 
-function un_obscure_cards(btn) {
-    btn.classList.remove('obscure-on')
+function un_obscure_cards() {
+    obscure_card_btn.classList.remove('obscure-on')
     display_cards.forEach((card,i) => {
         var text_node = card.querySelector('a')
         var original_card_text = hidden_cards_text.shift()
@@ -577,26 +680,12 @@ function obscure_box_touched(e) {
     if (e.touches.length > 1)
         return
 
-    if (!cards_obscured) { // obscure cards in display box
-        //this.style.opacity = 1
-        this.classList.add('obscure-on')
-        display_cards.forEach(card => {
-            var text_node = card.querySelector('a')
-            hidden_cards_text.push(text_node.innerText)
-            text_node.innerText = get_random_emoji()
-        });
-        cards_obscured = true
+    if (!cards_obscured) { 
+        obscure_cards()
     }
-    else { // reveal cards in display box
-        this.classList.remove('obscure-on')
-        display_cards.forEach((card,i) => {
-            var text_node = card.querySelector('a')
-            var original_card_text = hidden_cards_text.shift()
-            text_node.innerText = original_card_text
-        });
-        cards_obscured = false
+    else { 
+        un_obscure_cards()
     }
-
 }
 
 
@@ -641,18 +730,22 @@ function init_status_bar() {
 }
 
 var other_players_box;
+var other_players_box_left;
 function init_other_players_box() {
     const box_top_offset = h/16 + h/4 + 10 
     const box_padding = 10
+    other_players_box_left = box_padding
     var container = document.createElement('div')
     container.classList.add('other-players-box')
     container.style.position = 'absolute'
     container.style.top = box_top_offset + 'px'
-    container.style.left = box_padding + 'px'
+    container.style.left = other_players_box_left + 'px'
     container.style.width = w - box_padding*2 + 'px'
     container.style.minHeight = h/8 + 'px'
     container.style.maxHeight = 2*h/8 + 'px'
 
+    container.addEventListener("touchstart", other_players_box_touched, false); //WIP
+    container.addEventListener("touchmove", touchmove, false); //WIP
     document.body.appendChild(container)
     other_players_box = container
 }
@@ -737,8 +830,15 @@ function update_round_node(i) {
     round_no = i
 }
 
+function reset_drag_to_advance_bar() {
+    drag_to_advance_bar.style.left = w + 1 + 'px'
+    other_players_box.style.left = other_players_box_left+'px'
+}
+
 function clean_slate_for_new_round() {
+    reset_drag_to_advance_bar()
     fold_text_node.innerText = 'fold'
+    un_obscure_cards()
     for (let i = 0; i < 2 ; i++) {
         var j = 1-i // for some reason there's no i-- in javascript I guess
         current_display_card_index = j
@@ -779,6 +879,23 @@ function fold_hand(user) {
 }
 
 function fold_hand_done() {
+}
+
+function vote_to_advance_round() {
+    advance_round()
+}
+
+function advance_round() {
+    var url = '/api/advance'
+    ajax_request(url, round_advanced)
+    debug_info('advance round called')
+}
+function round_advanced(xhr){
+    //advance_triggered = false
+   // get_round_data() // refresh screen faster than 1000 ms polling interval
+    debug_info('advance round returned')
+    //clean_slate_for_new_round()
+
 }
 
 function post_hand(user, hand) {
@@ -910,7 +1027,7 @@ document.addEventListener("DOMContentLoaded", function(event) {
     //MAX_R = Math.round((.9)*d/2)
     shift_y = 0//-(r);
 
-    init_debug();
+    //init_debug();
     init_card_nodes();
     init_suit_nodes();
     init_canvas();
@@ -920,6 +1037,8 @@ document.addEventListener("DOMContentLoaded", function(event) {
     init_fold_btn();
     init_card_display_node(0) // to display two chosen cards
     init_card_display_node(1)
+    init_drag_to_advance_bar()
+    init_debug();
 
     px_in_em = get_px_in_em(cards[0])
     //suit_symbol_size_px = window.innerWidth/4;
@@ -929,7 +1048,7 @@ document.addEventListener("DOMContentLoaded", function(event) {
     window.addEventListener("touchstart", touchstart, false);
     window.addEventListener("touchend", touchend, false);
     window.addEventListener("touchmove", touchmove, false);
-    window.addEventListener("touchmove", touchmove, false);
+    //window.addEventListener("touchmove", touchmove, false);
    // document.body.addEventListener("touchmove", touchmove, false);
 
     const get_round_data_interval_id = setInterval(get_round_data, 1000)
