@@ -149,8 +149,11 @@ div{
 .other-players-box {
     font-size:1.5em;
     border-top:solid 4px #999;
-    border-top:solid 4px var(--green-felt);
-    border-bottom:solid 4px var(--green-felt);
+    border-top:solid 4px #bbb;/*var(--green-felt);*/
+    border-right:solid 8px #999;
+    border-left:solid 8px #999;
+    box-sizing:border-box;
+    border-bottom:solid 4px #bbb; /*var(--green-felt);*/
     display: flex;
     padding-top:.1em;
     padding-bottom:.1em;
@@ -158,7 +161,8 @@ div{
     justify-content:space-evenly;
     overflow:scroll;
 
-    background:var(--green-felt);/*2195cb;*/
+    /*background:var(--green-felt);*/
+    background:#ccc;
     background-image:var(--felt-img);
 }
 
@@ -178,7 +182,7 @@ div{
 }
 
 .drag-to-advance-round-box {
-    font-size:4em;
+    font-size:3.5em;
 /*    border-top:solid 4px #999;
     border-top:solid 4px var(--green-felt);
     border-bottom:solid 4px var(--green-felt);
@@ -187,11 +191,13 @@ div{
     padding-bottom:.1em;
     align-items:center;
     justify-content:space-evenly;
+    overflow:hidden;
+    color:#333;
 
 }
 
 .drag-to-advance-text {
-    color:#333;
+   /* color:#333;*/
     font-style:italic;
 }
 
@@ -199,8 +205,8 @@ div{
     /*position:absolute;
     left:0px;*/
 /*    right: 0px!important;*/
-    -webkit-transition: all 0.2s ease-in-out;
-    -moz-transition: all 0.2s ease-in-out;
+/*    -webkit-transition: all 0.2s ease-in-out;
+    -moz-transition: all 0.2s ease-in-out;*/
 }
 
 canvas#plane{

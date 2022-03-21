@@ -855,38 +855,12 @@ function update_round_node(i) {
     round_no = i
 }
 
-function lerp(elem, attr, val_start, val_end, dur, units, callback) {
-       var set_attr = function (elem, attr, val) { elem.style[attr] = val }
-       //var val_start = ((elem) => elem.style[attr])(elem)
-       var t0 = Date.now()
-       interpolate = function() {
-           let t = (Date.now() - t0)/dur
-           t = Math.pow(clamp(t, mn=0, mx=1), 2)
-           let val = (1-t)*val_start + t*val_end //interpolation
-           set_attr(elem, attr, val + units)
-           if (t == 1) { // end interpolation
-               clearInterval(lerp_interval_id)
-               if (callback)
-                   callback()
-           }
-       }
-       var lerp_interval_id = setInterval(interpolate, 16) // start interpolation
-}
-
 function reset_drag_to_advance_bar() {
-    var cur_left_box = other_players_box.getBoundingClientRect().left
-    var cur_left_text = drag_to_advance_bar.getBoundingClientRect().left
-    var displacement = cur_left_box - other_players_box_left
-    let T = 300
-    if (displacement != 0) { // interpolate back to original position
-        lerp(other_players_box, 'left', cur_left_box, other_players_box_left, T, 'px') 
-        lerp(drag_to_advance_bar, 'left', cur_left_text, w + 1, T, 'px') 
-    }
-    else {
-        drag_to_advance_bar.style.left = w + 1 + 'px'
-        other_players_box.style.left = other_players_box_left+'px'
-        //drag_to_advance_bar.style.color = '#ccc'
-    }
+//    var displacement = 
+    var cur_left = other_players_box.getBoundingClientRect().left
+    drag_to_advance_bar.style.left = w + 1 + 'px'
+    other_players_box.style.left = other_players_box_left+'px'
+    //drag_to_advance_bar.style.color = '#ccc'
 }
 
 function clean_slate_for_new_round() {
