@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, jsonify, redirect
+from flask import Flask, render_template, request, jsonify, redirect, Response
 import random
 import re
 import time
@@ -102,20 +102,45 @@ def api_reset():
     DB.init_db()
     return jsonify("database was reset")
 
+
 @app.route('/api/advance')
 def api_advance():
+    COOLDOWN = 10
     with DB.get_db() as db:
-        game = db.execute('SELECT * FROM game ORDER BY id DESC LIMIT 1;').fetchone()
+        game = get_current_game(db) 
+        # Check timestamp of current round as a guarded "cooldown" to prevent
+        #     multiple players advancing the round in quick succession.
+        round_data = get_current_round(db)
+        if round_data:
+            time_since_last_round = time.time() - round_data['created'].timestamp()
+            if time_since_last_round < COOLDOWN:
+                return jsonify({"error":"Round was not advanced. Still guarded by cooldown for "\
+                        f"{COOLDOWN - time_since_last_round:.0f} more seconds."})
+
+        # create new round
         db.execute('INSERT INTO round (game_id,round_no) VALUES (?,?);',
                         (game['id'], game['current_round_no']+1))
         db.execute('UPDATE game SET current_round_no = current_round_no + 1 \
                     WHERE id = (?);', (game['id'],))
-    return jsonify("round was advanced")
+    return jsonify({'result': "Round was advanced"})
 
 # db helper functions
+def get_current_game(db):
+        return db.execute('SELECT * FROM game ORDER BY id DESC LIMIT 1;').fetchone()
 
 def get_current_round(db):
     return db.execute('SELECT * from round ORDER BY id DESC LIMIT 1').fetchone()
+
+def get_round_by_id(db, round_id):
+    return db.execute('SELECT * from round WHERE id = (?);', (round_id,)).fetchone()
+
+def get_round_of_current_game_by_no(db, round_no):
+    return db.execute('SELECT * from round WHERE round_no = (?) ORDER BY id DESC LIMIT 1;',
+                        (round_no,)).fetchone()
+
+def get_winners_of_round_by_id(db, round_id):
+    return db.execute('SELECT * from winner WHERE round_id = (?);',
+                        (round_id,)).fetchall()
 
 def post_hand(db, hand):
     update = 'UPDATE hand SET high_card_id = (?), low_card_id = (?) \
@@ -139,7 +164,8 @@ def get_user_id(db, username):
     if user:
         return user['id']
     else: # create new user here? TODO... should never happen, need users to register..
-        cur = db.execute('INSERT INTO user (username, emoji) VALUES (?,?);', (username, "Nomoji"))
+        cur = db.execute('INSERT INTO user (username, emoji, ip_addr) VALUES (?,?,?);',
+                (username, "Nomoji", None))
         return cur.lastrowid
 
 
@@ -166,7 +192,7 @@ def api_hand():
     user = request.args.get('user')
     card_a = request.args.get('card_a')
     card_b = request.args.get('card_b')
-    ip_addr = request.args.get('remote_addr')
+    ip_addr = request.remote_addr
     ts = time.time()
     with DB.get_db() as db:
         user_id = get_user_id(db, user) # TODO: fix this hack or make usernames unique
@@ -176,12 +202,26 @@ def api_hand():
         print(user, card_a, card_b, ts)
         return 'successfully posted ajax request to sqlite...'
 
+@app.route('/api/user/new')
+def api_new_user():
+    username = request.args.get('username')
+    emoji = request.args.get('emoji')
+    ip_addr = request.remote_addr
+    with DB.get_db() as db:
+        try:
+            cur = db.execute('INSERT INTO user (username, emoji, ip_addr) VALUES (?,?,?);',
+                                               (username, emoji, ip_addr))
+            success = cur.rowcount
+            print(f'new user {username} with emoji {emoji} -- created from: {ip_addr}')
+        except db.IntegrityError:
+            success = 0
+            print('failed to create user {username}.')
+    return jsonify({'success':success, 'username': username})
 
 
 @app.route('/api/round/current')
 def api_current_round():
     result = { }
-    old_db = get_db()
     with DB.get_db() as db:
         round_data = get_current_round(db)
         result['round_no'] = round_data['round_no']
@@ -189,15 +229,44 @@ def api_current_round():
         result['players'] = {hand['username']:dict(hand) for hand in hands}
     return jsonify(result)
 
-@app.route('/api/round/<int:round_id>')
-def api_round(round_id):
-#    raise RuntimeError('API FUNCTION /api/round/ DEPRECATED')
-    db = get_db()
-    current_round_id = db.get('current_round_id')
-    if round_id > current_round_id:
-        return jsonify({'error':f'round {round_id} not played yet'})
-    round_data = db['rounds'][round_id]
-    return jsonify({username:hand.to_dict() for username,hand in round_data.items()})
+@app.route('/api/round/<int:round_no>')
+def api_get_round_of_current_game(round_no):
+    result = { }
+    with DB.get_db() as db:
+        round_data = get_round_of_current_game_by_no(db, round_no)
+        if not round_data:
+            return jsonify({'error':f'round {round_no} not played yet'})
+
+        winners = get_winners_of_round_by_id(db, round_data['id'])
+        result['winners'] = [winner['user_id'] for winner in winners]
+        print(result['winners'])
+
+        result['round_no'] = round_data['round_no']
+        hands = get_hands_in_round(db, round_data['id'])
+        if not hands:
+            return jsonify({'error':f'round {round_no} has no played hands'})
+        result['players'] = {hand['username']:dict(hand) for hand in hands}
+    return jsonify(result)
+    #return Response(json.dumps(result), mimetype='application/json')
+
+@app.route('/api/winners/<int:round_no>') # defunct
+def api_get_round_winner(round_no):
+    result = { }
+    with DB.get_db() as db:
+        round_data = get_round_of_current_game_by_no(db, round_no)
+        result['round_no'] = round_data['round_no']
+        if not round_data:
+            return jsonify({'error':f'round {round_no} not played yet'})
+        winners = get_winners_of_round_by_id(db, round_data['id'])
+        result['winners'] = [dict(winner) for winner in winners]
+    return jsonify(result)
+
+@app.route('/api/winners/create') # defunct, done with an SQL TRIGGER now.
+def api_create_winners():
+    with DB.get_db() as db:
+        # mark concluding round's winners
+        db.execute('INSERT INTO winner (user_id, round_id) VALUES (?,?);',
+                (user_id,round_id))
 
 @app.route('/ring')
 def ring_no_user():
@@ -211,12 +280,30 @@ def ring(user): # TODO: make user register if first time here, otherwise load th
         round_id = round_data['id']
         round_no = round_data['round_no']
 
-    print('round_no:', round_no)
-    emoji = json.load(open('static/js/emoji.json','rb'))['emojis']
-    pat = re.compile('.*(food|animal|music|clothing)')
-    emoji = [e for e in emoji if pat.match(e['category'].lower())]
+        winners = get_winners_of_round_by_id(db, round_id-1)
+        winners = [winner['user_id'] for winner in winners]
+        print('winners:',winners)
 
-    return render_template('ring.html', round_no=round_no, username=user, emoji=emoji)
+    print('round_no:', round_no)
+
+    pat = re.compile('.*(food|animal|music|clothing)')
+    emoji = get_emoji(pat)
+    return render_template('ring.html', round_no=round_no, username=user,
+                            emoji=emoji, winners=winners)
+
+def get_emoji(pat):
+    emoji = json.load(open('static/js/emoji.json','rb'))['emojis']
+    return [e for e in emoji if pat.match(e['category'].lower())]
+
+@app.route('/favicon.ico')
+def favicon():
+    return 'lol'
+
+@app.route('/choose/<user>')
+def choose(user):
+    pat = re.compile('.*(food|animal|music|clothing)')
+    emoji = get_emoji(pat)
+    return render_template('choose.html', username=user, emoji=emoji)
 
 @app.route('/play/')
 def play_no_username():

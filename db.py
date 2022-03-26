@@ -1,6 +1,7 @@
 import sqlite3
 
 class Database:
+    IntegrityError = sqlite3.IntegrityError
     def __init__(self, name):
         self.conn = sqlite3.connect(name, detect_types=sqlite3.PARSE_DECLTYPES)
         self.conn.row_factory = sqlite3.Row

@@ -1,0 +1,15 @@
+<!doctype html>
+<title>Choose</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='style/choose.css') }}">
+<script type="text/javascript" src ="{{ url_for('static', filename = 'js/choose.js') }}">
+</script>
+<script type="text/javascript">
+            emojicon = load_emoji({{emoji|tojson}});
+            username_ = load_data_from_server('username', {{username|tojson}});
+</script>
+
+<div id='main-container'>
+    <div id='emoji-container'>
+    </div>
+</div>
+

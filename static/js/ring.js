@@ -7,11 +7,13 @@ var cx_real;
 var cy_real;
 var column_touched;
 const start_angles = [Math.PI/2 - Math.PI/6, -Math.PI/6, -Math.PI/2 - Math.PI/6] 
+const AFK_TIMEOUT = 20*60 // stop updating if no touches in 20 minutes
+var last_touch_start = Date.now()
 
 function touchstart(e) {
-//    debug_info('left: '+e.target.getBoundingClientRect().left)
     // TODO :make this into a dispatcher for all touches, so can check # of touches
     // and limit it to one... use ''this'' object to select which sub-handler to call
+    last_touch_start = Date.now()
     var touch = e.touches[0];
     touch_start_time = Date.now(); 
     cx_real = touch.pageX
@@ -293,13 +295,14 @@ function draw_sector(px,py) {
     // responsive sizing and opacity
     selected_card = null;
     var min_dist = 100;
+    let zoom_factor = 1;
     cards.forEach(card => { 
         var anchor = card.querySelector('a')
         var dt = phi - card.t;
         var abs_dt = Math.abs(dt)
         if (abs_dt < theta_slice){
             card.style.opacity = 0.3 + 0.7*(1 - abs_dt/theta_slice);
-            anchor.style.fontSize = 2 + 1*(1 - abs_dt/theta_slice) + 'em';
+            anchor.style.fontSize = 2 + zoom_factor*(1 - abs_dt/theta_slice) + 'em';
             if (abs_dt < min_dist){
                 min_dist = abs_dt;
                 selected_card = card;
@@ -430,11 +433,12 @@ function drag_bar_to_advance_round(event) {
     debug_info(px)
     if (-vx > w/2 && !advance_triggered) { //&& !touchdown) {
         advance_triggered = true
-        animate_box_offscreen(other_players_box, L*(-w/2))
+//        animate_box_offscreen(other_players_box, L*(-w/2))
+        lerp(other_players_box, 'left', L*(-w/2), -w, 200, 'px', callback=vote_to_advance_round)
     }
 
 }
-
+/*
 function animate_box_offscreen(box, start_left_x) {
    var t0 = Date.now()
    var max_shift = w + start_left_x
@@ -451,7 +455,7 @@ function animate_box_offscreen(box, start_left_x) {
    }
    var lerp_slide_id = setInterval(lerp_slide, 16, box)
 }
-
+*/
 //var touchdown = false
 function touchmove(event) {
     //touchdown = true
@@ -533,11 +537,11 @@ function modulate_suit_size(suit_box) {
 
 var suit_symbol_size_px;
 var suit_default_opacity;
-const suit_colors = ['#ec2c30', '#1843d7', '#404241', '#1f8a59']
+const suit_colors = ['#ec2c30', '#ec2c30', '#404241', '#404241']
 const suit_colors_dark = [ '#ec2c30', //hearts
-                           '#1843d7', //diam
+                           '#ec2c30', //diam
                             '#0a1527', //spades
-                           '#1f8a59'] //clubs
+                           '#0a1527'] //clubs
 
 var main_suit_boxes = {}
 function init_suit_nodes() {
@@ -578,9 +582,6 @@ function init_suit_nodes() {
 }
 
 
-//const emoji = ['0x1f366']
-//const emoji = code_points.map(cp => String.fromCodePoint(cp))
-
 /* --- functions to load data from server */
 var emoji;
 function load_emoji(emoji_from_server) {
@@ -588,13 +589,12 @@ function load_emoji(emoji_from_server) {
 }
 
 var data_from_server = {};
-//var round_id = -1;
-//var round_no = 0;
 function load_data_from_server(attr, val) {
     console.log('got from server: ' + attr + ':' + val)
     data_from_server[attr] = val;
 }
 /* --- end functions to load data from server */
+
 
 function get_random_emoji() {
     var i = Math.floor(Math.random() * emoji.length)
@@ -756,18 +756,20 @@ function init_status_bar() {
 
 var other_players_box;
 var other_players_box_left;
+var other_players_box_min_h;
 function init_other_players_box() {
     const box_top_offset = h/16 + h/4 + 10 
     const box_padding = 10
     other_players_box_left = box_padding
+    other_players_box_min_h = h/8
     var container = document.createElement('div')
     container.classList.add('other-players-box')
     container.style.position = 'absolute'
     container.style.top = box_top_offset + 'px'
     container.style.left = other_players_box_left + 'px'
     container.style.width = w - box_padding*2 + 'px'
-    container.style.minHeight = h/8 + 'px'
-    container.style.maxHeight = 2*h/8 + 'px'
+    container.style.minHeight = other_players_box_min_h + 'px'
+    container.style.maxHeight = 2*other_players_box_min_h + 'px'
 
     container.addEventListener("touchstart", other_players_box_touched, false); //WIP
     container.addEventListener("touchmove", touchmove, false); //WIP
@@ -776,15 +778,65 @@ function init_other_players_box() {
 }
 
 var active_players = { }
-function add_other_players_hand(username, emoji) {
+function add_other_players_hand(player_info) {
     var div = document.createElement('div')
     var anchor = document.createElement('a')
     div.classList.add('other-player-hand-container')
     anchor.classList.add('other-player-hand-text') 
-    anchor.innerText = username // + (emoji || '')
+    anchor.innerText = player_info.emoji //username // + (emoji || '')
+    anchor.style.fontSize = other_players_box_min_h/2 + 'px' 
     div.appendChild(anchor)
+   // check_if_won_last_round(player_info, div)  // don't do this here, no DOM bbox data 'til added
     other_players_box.appendChild(div)
-    active_players[username] = div
+    check_if_won_last_round(player_info, div) // check after adding to DOM to get rendered bbox data
+    active_players[player_info.username] = div
+}
+
+function check_for_round_winners(round_no) {
+    let check_winner = function (xhr) {
+        let resp = JSON.parse(xhr.response)
+        let winner_ids = []
+        if (!resp.winners) {
+            console.log('no winners returned from server.')
+            return
+        }
+        for (let [key, user_id] in Object.entries(resp.winners)) {
+            winner_ids.push(resp.winners[key])
+        }
+        if (winner_ids.length > 0) {
+            winners = winner_ids
+            console.log('winners::: ' + winners)
+        }
+    }
+
+    const endpoint = `/api/round/${round_no}`
+    ajax_request(endpoint, check_winner) 
+
+}
+
+function check_if_won_last_round(player_info, div) {
+    if (winners && winners.includes(player_info.id)) {
+//        div.style.background = 'yellow' // TODO: WIP
+        let anchor = document.createElement('a')
+        anchor.innerHTML = '&#128081;' // crown emoji👑
+        anchor.style.position = 'relative'
+        anchor.style.display = 'block'
+        anchor.style.height = 0 // don't take up space in div
+        anchor.style.fontSize = 3 + 'em'
+        div.appendChild(anchor)
+        let div_bbox = div.getBoundingClientRect()
+        let anchor_bbox = anchor.getBoundingClientRect()
+        let dx = div_bbox.left - anchor_bbox.left
+        let dy = div_bbox.top - anchor_bbox.top
+        let pixw = get_px_in_em(anchor)
+        console.log('dx,dy: ' + dx + ' ' + dy + 'bbox,div,anch:' + div_bbox + ' ' + anchor_bbox)
+        anchor.style.top = dy - pixw/2 + 'px'
+        anchor.style.left = dx - pixw + 'px'
+        
+        rotate_node(anchor, -Math.PI/4)
+
+    }
+
 }
 
 function cull_player(username) {
@@ -846,23 +898,26 @@ function init_card_display_node(i) {
 }
 
 var round_no; // = 0;
+var winners;
 function update_round_node(i) {
     round_node.innerText = 'round # ' + i
+
     // advanced to new round
     if (round_no != undefined && i > round_no) {
         clean_slate_for_new_round()
+        check_for_round_winners(round_no)
     }
     round_no = i
 }
 
-function lerp(elem, attr, val_start, val_end, dur, units, callback) {
+function lerp(elem, attr, val_start, val_end, dur, units, callback,lerp_func=(t)=>t*t) {
        var set_attr = function (elem, attr, val) { elem.style[attr] = val }
-       //var val_start = ((elem) => elem.style[attr])(elem)
        var t0 = Date.now()
        interpolate = function() {
            let t = (Date.now() - t0)/dur
-           t = Math.pow(clamp(t, mn=0, mx=1), 2)
-           let val = (1-t)*val_start + t*val_end //interpolation
+           //t = Math.pow(clamp(t, mn=0, mx=1), 2) // quadradic
+           t = lerp_func(clamp(t, mn=0, mx=1)) // apply custom lerp easing func
+           let val = (1-t)*val_start + t*val_end // interpolation
            set_attr(elem, attr, val + units)
            if (t == 1) { // end interpolation
                clearInterval(lerp_interval_id)
@@ -877,7 +932,7 @@ function reset_drag_to_advance_bar() {
     var cur_left_box = other_players_box.getBoundingClientRect().left
     var cur_left_text = drag_to_advance_bar.getBoundingClientRect().left
     var displacement = cur_left_box - other_players_box_left
-    let T = 300
+    let T = 200
     if (displacement != 0) { // interpolate back to original position
         lerp(other_players_box, 'left', cur_left_box, other_players_box_left, T, 'px') 
         lerp(drag_to_advance_bar, 'left', cur_left_text, w + 1, T, 'px') 
@@ -885,14 +940,18 @@ function reset_drag_to_advance_bar() {
     else {
         drag_to_advance_bar.style.left = w + 1 + 'px'
         other_players_box.style.left = other_players_box_left+'px'
-        //drag_to_advance_bar.style.color = '#ccc'
     }
+}
+
+function clear_winners() {
+    winners = []
 }
 
 function clean_slate_for_new_round() {
     reset_drag_to_advance_bar()
     fold_text_node.innerText = 'fold'
     un_obscure_cards()
+    clear_winners()
     for (let i = 0; i < 2 ; i++) {
         var j = 1-i // for some reason there's no i-- in javascript I guess
         current_display_card_index = j
@@ -904,20 +963,25 @@ function clean_slate_for_new_round() {
 var hand = { };
 var debug_node;
 var debug_msg = '';
+const DEBUG_MODE = false
 function debug_info(msg) {
-   debug_node.innerText = msg; 
-   debug_msg = msg;
+   if (DEBUG_MODE) {
+       debug_node.innerText = msg; 
+       debug_msg = msg;
+   }
 }
 
 function init_debug(){
-    debug_node = document.createElement('p')
-    debug_node.style.fontSize = '2em'
-    debug_node.style.background = 'pink'
-    debug_node.style.position = 'absolute'
-    debug_node.style.left = '0px'
-    debug_node.style.top = '0px'
-    debug_node.innerText = 'debug info'
-    document.body.appendChild(debug_node)
+    if (DEBUG_MODE) {
+        debug_node = document.createElement('p')
+        debug_node.style.fontSize = '2em'
+        debug_node.style.background = 'pink'
+        debug_node.style.position = 'absolute'
+        debug_node.style.left = '0px'
+        debug_node.style.top = '0px'
+        debug_node.innerText = 'debug info'
+        document.body.appendChild(debug_node)
+    }
 }
 
 /* ---- utility funcs */
@@ -946,6 +1010,11 @@ function advance_round() {
 }
 function round_advanced(xhr) {
     debug_info('advance round returned')
+
+    resp = JSON.parse(xhr.response)
+    if ("error" in resp)
+        reset_drag_to_advance_bar() // ExPeRiMeNtAl, TODO verify if it should be here.
+
     // lock updates globally, so no polling update occurs
     // while this triggered update occurs.
     global_update_locked = true
@@ -964,6 +1033,9 @@ function post_hand(user, hand) {
 
 var global_update_locked=false
 function get_round_data(pass_thru_lock=false) {
+    let time_since_last_touch = Date.now() - last_touch_start
+    if (time_since_last_touch > AFK_TIMEOUT*1000)
+        return
     if (global_update_locked && !pass_thru_lock){
         debug_info('locked out')
         return
@@ -989,7 +1061,7 @@ function process_round_data(xhr) {
         var player_info = players[username]
         // add new players to the round
         if (!(username in active_players)) {
-            add_other_players_hand(username, player_info['emoji'])
+            add_other_players_hand(player_info)
         }
         // remove folded players from the round
         if (player_info.folded == 1) {
@@ -1096,6 +1168,9 @@ document.addEventListener("DOMContentLoaded", function(event) {
     init_suit_nodes();
     init_canvas();
     init_status_bar();
+//    check_for_round_winners() //WIP EXPERIMENTAL
+    winners = data_from_server.winners
+    console.log('winners from page load: ' + winners)
     init_other_players_box()
     init_obscure_btn();
     init_fold_btn();
@@ -1115,7 +1190,8 @@ document.addEventListener("DOMContentLoaded", function(event) {
     //window.addEventListener("touchmove", touchmove, false);
    // document.body.addEventListener("touchmove", touchmove, false);
 
-    const get_round_data_interval_id = setInterval(get_round_data, POLL_INTERVAL)
+    //TODO: dynamic poll rate
+    var get_round_data_interval_id = setInterval(get_round_data, POLL_INTERVAL)
 
 });
 

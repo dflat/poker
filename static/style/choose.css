@@ -1,0 +1,97 @@
+body {
+    margin:0;
+}
+
+div#main-container {
+    background:pink;
+    position: absolute;
+    top:0px;
+    left:0px;
+    width: 100vw;
+    box-sizing: border-box;
+}
+
+/*
+div#emoji-container {
+    background:#eee;
+    display: flex;
+    max-width:90vw;
+    max-height:90vh;
+    flex-wrap:wrap;
+    overflow-y: scroll;
+}
+*/
+.obscure-view {
+/*    visibility: hidden;*/
+    filter: blur(0.5rem);
+    /*-webkit-filter: blur(1.5rem) hue-rotate(90deg) sepia(100%);*/
+    transition: all 0.5s ease;
+}
+
+.modal {
+    position:absolute;
+    width:100vw;
+    height:100vh;
+    display:flex;
+    justify-content:center;
+}
+
+a.msg-anchor {
+    font-style:italic;
+    font-size:6vw;
+    display:inline-block;
+    width:100vw;
+    text-align:center;
+    padding-top:25vh;
+    padding-bottom:5vh;
+    background:#f8f4ff;
+    border-bottom:solid 4px #d9cbef;
+    color:#5e5175;
+}
+
+.modal-container {
+    /*display:flex;
+    align-items:center;
+    justify-content:center;
+    */
+}
+
+.confirm-btn {
+    background:pink;
+    width:100vw;
+    width:100vw;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    border-radius:3em;
+    background:#f8f4ff;
+    border-bottom:solid 4px #d9cbef;
+    color:#5e5175;
+}
+
+.confirm-btn a {
+    font-size:6vw;
+    /*text-align:center;
+    display:block;*/
+}
+
+div#emoji-container {
+    background-color: #ccc;
+}
+.emoji-box {
+    background-color: transparent;
+    /*margin: 1em;*/
+    display:flex;
+    align-items:center;
+    justify-content:center;
+}
+
+.highlighted {
+   /*border: solid #ccc 16px;*/
+    background:#031fff24;
+    /*border-right: solid #ccc 16px;*/
+}
+
+.emoji-symbol {
+    opacity:1;
+}
