@@ -149,6 +149,8 @@ var cy = 0;
 var px_in_em = 100;
 var cards = [];
 const CARD_VALS = ['2','3','4','5','6','7','8','9','10','J','Q','K','A'];
+const CARD_VAL_MAP = {'2':0,'3':1,'4':2,'5':3,'6':4,'7':5,'8':6,'9':7,'10':8,
+                        'J':9,'Q':10,'K':11,'A':12};
 var N = CARD_VALS.length;
 
 
@@ -344,15 +346,29 @@ function card_is_already_in_hand(selected_card) {
     return result
 }
 
+function get_card_id(suit_string, value_string) {
+    let val = CARD_VAL_MAP[value_string] + 1
+    let suit = suit_codes[suit_string]
+    return suit*13 + val
+}
+
 var current_display_card_index = 0;
 function display_selected_card() {
     var display_box = display_cards[current_display_card_index]
     var display_anchor = display_box.querySelector('a')
     display_box.value = selected_card.innerText 
     display_box.suit = active_suit
-    display_anchor.innerText = selected_card.innerText + ' ' + suit_unicode[active_suit]
 
-    display_anchor.style.color = suit_colors_dark[suit_codes[active_suit]]
+    //display_anchor.innerText = selected_card.innerText + ' ' + suit_unicode[active_suit]
+    //display_anchor.style.color = suit_colors_dark[suit_codes[active_suit]]
+
+    if (display_box.card_id) {
+        place_card_offscreen(display_box.card_id)
+    }
+    let card_id = get_card_id(active_suit, selected_card.innerText)
+    place_card_in_display_box(card_id, current_display_card_index)
+    display_box.card_id = card_id
+    console.log('displaying ' + card_id)
 }
 
 function clear_selected_card() {
@@ -361,6 +377,10 @@ function clear_selected_card() {
     display_box.value = null;
     display_box.suit = null;
     display_anchor.innerText = '' 
+
+    if (display_box.card_id) {
+        place_card_offscreen(display_box.card_id)
+    }
 
 }
 
@@ -679,12 +699,20 @@ function fold_box_touched(e) {
 
 var cards_obscured = false
 var hidden_cards_text = []
+var hidden_card_ids = []
 
 function obscure_cards() {
     obscure_card_btn.classList.add('obscure-on')
-    display_cards.forEach(card => {
-        var text_node = card.querySelector('a')
+    display_cards.forEach((disp_card,i) => {
+        var text_node = disp_card.querySelector('a')
         hidden_cards_text.push(text_node.innerText)
+
+        let display_box = display_cards[i]
+        if (display_box.card_id) {
+            place_card_offscreen(display_box.card_id)
+            hidden_card_ids.push(display_box.card_id)
+        }
+
         text_node.innerText = get_random_emoji()
     });
     cards_obscured = true
@@ -696,6 +724,12 @@ function un_obscure_cards() {
         var text_node = card.querySelector('a')
         var original_card_text = hidden_cards_text.shift()
         text_node.innerText = original_card_text
+
+        let card_id = hidden_card_ids.shift()
+        if (card_id) {
+            place_card_in_display_box(card_id, i)
+        }
+        
     });
     cards_obscured = false
 }
@@ -758,7 +792,7 @@ var other_players_box;
 var other_players_box_left;
 var other_players_box_min_h;
 function init_other_players_box() {
-    const box_top_offset = h/16 + h/4 + 10 
+    const box_top_offset = h/16 + h/4 + 10 + 10 //TODO added 10 here, idk if any dependent positions
     const box_padding = 10
     other_players_box_left = box_padding
     other_players_box_min_h = h/8
@@ -823,6 +857,7 @@ function check_if_won_last_round(player_info, div) {
         anchor.style.display = 'block'
         anchor.style.height = 0 // don't take up space in div
         anchor.style.fontSize = 3 + 'em'
+        anchor.style.zIndex = 2;
         div.appendChild(anchor)
         let div_bbox = div.getBoundingClientRect()
         let anchor_bbox = anchor.getBoundingClientRect()
@@ -865,6 +900,8 @@ function init_card_display_node(i) {
     var w = window.innerWidth
     var h = window.innerHeight
     var half_w = w/2
+    var pad = 10
+    var disp_w = half_w - 2*pad
     var quad_h = h/4
     var font_size = half_w/2
 
@@ -883,9 +920,11 @@ function init_card_display_node(i) {
     container.value = null;
     container.suit = null;
     container.style.position = 'absolute'
-    container.style.left = i * half_w + 4 + 'px'
+    //container.style.left = i * half_w + 4 + 'px'
+    container.style.left = i * (half_w) + pad + 'px'
     container.style.top = Math.round(quad_h/4) + 'px'
-    container.style.width = half_w - 8 +'px'
+    //container.style.width = half_w - 8 +'px'
+    container.style.width = disp_w +'px'
     container.style.height = quad_h + 'px'
 
     //node.style.color = suit_colors[i]
@@ -958,6 +997,65 @@ function clean_slate_for_new_round() {
         clear_selected_card()
         remove_card_from_hand(j)
     }
+}
+
+var card_svgs;
+var card_svgs_fan = []
+var card_width;
+function init_card_svgs() {
+    card_svgs = document.querySelectorAll('#card-svgs > svg') // Original svg set
+
+    let card_fan_div = document.createElement('div')          // Clone set for user selection fan
+    card_fan_div.id = "card-svg-fan"
+    card_svgs.forEach((card) => {
+        let clone = card.cloneNode(true) // deep clone
+        card_fan_div.appendChild(clone)
+        card_svgs_fan.push(clone)
+    })
+    document.body.appendChild(card_fan_div)
+
+    let aspect = 25/35
+    card_width = w/4 // get display-card-box0 and use its width - some padding (todo)
+    let apply_style = (card_svg_collection, y_pos) => {
+        card_svg_collection.forEach(card => {
+            // add css class 'hidden' (todo?)
+            card.style.display = 'none'
+            card.style.position = 'absolute'
+            card.style.width = card_width + 'px'
+            card.style.height = card_width*(1/aspect) + 'px'
+            card.style.left = -card_width - 10 + 'px'
+            card.style.top = y_pos + 'px'
+        })
+    }
+    apply_style(card_svgs, 0)
+    apply_style(card_svgs_fan, 0)
+}
+
+function place_card_svg(card_id, cx, cy) {
+    let card = card_svgs[card_id-1]
+    card.style.display = ''
+    let card_bbox = card.getBoundingClientRect()
+    let card_cx = card_bbox.left + card_bbox.width/2
+    let card_cy = card_bbox.top + card_bbox.height/2
+    let dx = cx - card_cx
+    let dy = cy - card_cy
+    card.style.left = card_bbox.left + dx + 'px'
+    card.style.top = card_bbox.top + dy + 'px'
+}
+
+function place_card_in_display_box(card_id, display_box_id) {
+    let display_elem = display_cards[display_box_id]
+    let display_bbox = display_elem.getBoundingClientRect()
+    let cx = display_bbox.left + display_bbox.width/2
+    let cy = display_bbox.top + display_bbox.height/2
+    place_card_svg(card_id, cx, cy)
+}
+
+function place_card_offscreen(card_id) {
+    let card = card_svgs[card_id-1]
+    card.style.display = 'none'
+    card.style.left = -card_width - 10 + 'px'
+    card.style.top = 0 + 'px'
 }
 
 var hand = { };
@@ -1177,6 +1275,7 @@ document.addEventListener("DOMContentLoaded", function(event) {
     init_card_display_node(0) // to display two chosen cards
     init_card_display_node(1)
     init_drag_to_advance_bar()
+    init_card_svgs()
     init_debug();
 
     px_in_em = get_px_in_em(cards[0])

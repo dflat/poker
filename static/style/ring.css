@@ -1,4 +1,5 @@
 :root {
+   --card-in-time: .1s;
    --grey-trans: rgba(200,200,200,0.5);
    --gold:#F5AA23;
    --black-halo: #444;
@@ -72,13 +73,33 @@ div{
     display:flex;
     align-items:center;
     justify-content:center;
-    background:var(--grey-trans);
-/*    background:var(--green-felt);
-    background-image:var(--felt-img);*/
+ /*   background:var(--grey-trans);*/
+
+    /*background:var(--green-felt);*/
+    background:#1b5240;
+    background-image:var(--felt-img);
+
     border-top: solid #bbb 4px;
     border-bottom: solid var(--grey-trans) 4px;
+    /*z-index:0;*/
 }
 
+#card-svgs svg {
+    opacity:1;
+    z-index:2;
+    /*transform: matrix(.707,-.707,.707,.707,0,0);*/
+    /*
+    -webkit-transition: all var(--card-in-time) ease-in-out;
+    -moz-transition: all var(--card-in-time)  ease-in-out;
+    -o-transition: all  var(--card-in-time) ease-in-out;
+    transition: all  var(--card-in-time) ease-in-out;
+    */
+}
+#card-svgs svg > rect{
+    fill:#ffffee;
+    stroke:#e4e4d5;
+    /*background-image:var(--felt-img);*/
+}
 .already-selected-card {
     /*color:blue;*/
     color:var(--gold);
@@ -164,6 +185,7 @@ div{
 
     /*background:var(--green-felt);*/
     background:#ccc;
+    background:rgba(204,204,204,.8);
     background-image:var(--felt-img);
 }
 
