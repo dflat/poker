@@ -1,5 +1,9 @@
 :root {
    --card-in-time: .1s;
+   --card-select-time: .2s;
+   --card-fill: #f6f6de; /*#f6f6eb;*//*#eeeed2;*/
+   --card-selected-fill: #ffffee;
+   --card-stroke: #ececd0; /*#ddddbb;*/
    --grey-trans: rgba(200,200,200,0.5);
    --gold:#F5AA23;
    --black-halo: #444;
@@ -81,6 +85,7 @@ div{
 
     border-top: solid #bbb 4px;
     border-bottom: solid var(--grey-trans) 4px;
+    border-radius:8px;
     /*z-index:0;*/
 }
 
@@ -96,10 +101,39 @@ div{
     */
 }
 #card-svgs svg > rect{
-    fill:#ffffee;
-    stroke:#e4e4d5;
+    /*fill:#ffffee;*/
+    fill:var(--card-fill);
+    stroke:var(--card-stroke);/*#e4e4d5;*/
     /*background-image:var(--felt-img);*/
 }
+
+#card-svg-fan svg {
+    z-index:2;
+    /*transform: matrix(.707,-.707,.707,.707,0,0);*/
+    /*transform: rotate(10deg);*/
+}
+
+#card-svg-fan svg > rect{
+    /*fill:#ffffee;*/
+    fill:var(--card-fill);
+    stroke:var(--card-stroke);/*#e4e4d5;*/
+    /*stroke:#e4e4d5;*/
+    z-index:2;
+    /*background-image:var(--felt-img);*/
+    -webkit-transition: all var(--card-select-time) ease-in-out;
+    -moz-transition: all var(--card-select-time) ease-in-out;
+}
+#card-svg-fan svg.selected-svg-card > rect {
+    /*stroke:#ddddbb;
+    stroke-width:3px;
+    fill:#ffffff;
+    fill:#ddddbb;
+    */
+    fill:var(--card-selected-fill);
+    -webkit-transition: all var(--card-select-time) ease-in-out;
+    -moz-transition: all var(--card-select-time) ease-in-out;
+}
+
 .already-selected-card {
     /*color:blue;*/
     color:var(--gold);

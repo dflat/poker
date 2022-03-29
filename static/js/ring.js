@@ -14,8 +14,8 @@ function touchstart(e) {
     // TODO :make this into a dispatcher for all touches, so can check # of touches
     // and limit it to one... use ''this'' object to select which sub-handler to call
     last_touch_start = Date.now()
-    var touch = e.touches[0];
     touch_start_time = Date.now(); 
+    var touch = e.touches[0];
     cx_real = touch.pageX
     cy_real = touch.pageY
 
@@ -33,8 +33,10 @@ function touchstart(e) {
     cy = Math.max(mx_cy, cy_real)
     column_touched = rescale(cx_real,mn=0,mx=w,a=0,b=2)
 
-    //cards.forEach(draw_circle);
-    intervalID = setInterval(resize_circle, 16);
+    //cards.forEach(Draw_circle);
+    //intervalID = setInterval(resize_circle, 8);
+
+    card_fan.fan(suit_codes[active_suit])
 
     timer = setTimeout(onlongtouch, touchduration); 
 }
@@ -194,6 +196,9 @@ function touchend(e) {
     var ctx = plane.getContext('2d');
     ctx.clearRect(0,0,plane.width,plane.height);
     hide_card_nodes();
+
+    card_fan.hide_fan()
+
     //stops short touches from firing the event
     if (intervalID){
         r = 0;
@@ -248,7 +253,7 @@ function advance_display_card_index(){
     current_display_card_index = (ix + 1) % MAX_HAND_SIZE
 }
 
-var px = 0;
+var px = 0; // Touch point
 var py = 0;
 
 function rescale(x,mn,mx,a=0,b=1){
@@ -257,6 +262,14 @@ function rescale(x,mn,mx,a=0,b=1){
 
 function clamp(x, mn, mx) {
     return Math.min(mx, Math.max(mn, x));
+}
+
+function choose_from_fan(event) {
+    if (!active_suit)
+        return
+    card_fan.choosing_update()
+
+
 }
 
 var selected_card;
@@ -485,7 +498,10 @@ function touchmove(event) {
     var touch = event.touches[0];
     px = touch.pageX;
     py = touch.pageY;
-    draw_sector(px,py);
+    //draw_sector(px,py);
+
+    choose_from_fan(event);
+
     //TODO move stuff into this function from draw sector (that isnt drawing sector)
     /*
     var up = (event.pageY > this.lastY), down = !up;
@@ -570,7 +586,7 @@ function init_suit_nodes() {
     var h = window.innerHeight
     var left_edge = 2*w/8
     var quad_w = w/2 - left_edge
-    var quad_h = quad_w//h/4
+    var quad_h = quad_w * 0.7//h/4
     var font_size = quad_w/2
     suit_symbol_size_px = font_size
     suits.forEach((suit,i) => {
@@ -901,7 +917,7 @@ function init_card_display_node(i) {
     var h = window.innerHeight
     var half_w = w/2
     var pad = 10
-    var disp_w = half_w - 2*pad
+    var disp_w = half_w - pad
     var quad_h = h/4
     var font_size = half_w/2
 
@@ -921,7 +937,8 @@ function init_card_display_node(i) {
     container.suit = null;
     container.style.position = 'absolute'
     //container.style.left = i * half_w + 4 + 'px'
-    container.style.left = i * (half_w) + pad + 'px'
+    //container.style.left = i * (half_w) + pad + 'px'
+    container.style.left = i * (disp_w) + pad + 'px'
     container.style.top = Math.round(quad_h/4) + 'px'
     //container.style.width = half_w - 8 +'px'
     container.style.width = disp_w +'px'
@@ -967,6 +984,28 @@ function lerp(elem, attr, val_start, val_end, dur, units, callback,lerp_func=(t)
        var lerp_interval_id = setInterval(interpolate, 16) // start interpolation
 }
 
+function lerp_sync(changes, dur, callback, lerp_func=(t)=>t*t) {
+       console.log('lerp', changes);
+       /* *
+        * e.g.: changes = [{val_start:a, val_end:z, set_attr:func, elem:node}, {...}, ... ]
+        * */
+       var t0 = Date.now()
+       interpolate = function() {
+           let t = (Date.now() - t0)/dur
+           t = lerp_func(clamp(t, mn=0, mx=1))   // apply custom lerp easing func
+           changes.forEach(change => {
+               let val = (1-t)*change.val_start + t*change.val_end // interpolate each change
+               change.set_attr(change.elem, val)
+           })
+           if (t == 1) { // end interpolation
+               clearInterval(lerp_interval_id)
+               if (callback)
+                   callback()
+           }
+       }
+       var lerp_interval_id = setInterval(interpolate, 8) // start interpolation
+}
+
 function reset_drag_to_advance_bar() {
     var cur_left_box = other_players_box.getBoundingClientRect().left
     var cur_left_text = drag_to_advance_bar.getBoundingClientRect().left
@@ -998,6 +1037,7 @@ function clean_slate_for_new_round() {
         remove_card_from_hand(j)
     }
 }
+
 
 var card_svgs;
 var card_svgs_fan = []
@@ -1058,12 +1098,156 @@ function place_card_offscreen(card_id) {
     card.style.top = 0 + 'px'
 }
 
+class Hand {
+    constructor() {
+        this.card_left;
+        this.card_right;
+    }
+    swap() {
+    }
+    clear() {
+    }
+}
+
+class CardFan {
+    constructor(svgs) {
+        this.svgs = svgs;
+        this.hidden_top = 0;
+        this.hidden_left = -card_width;
+        this.top_pad = 20
+        let felt_bbox = other_players_box.getBoundingClientRect();
+        this.top_edge = felt_bbox.bottom + this.top_pad;
+        this.left_edge = felt_bbox.left;
+        this.card_w = card_width;
+        this.aspect = 25/35 
+        this.card_h = card_width*(1/this.aspect)
+        this.section_w = (felt_bbox.width - card_width*0)/13; // or w/13 ?
+        this.lerp_speed = 300;
+        this.active_suit = null;
+        this.selected_card = null;
+        this.fanned_cards = null;
+    }
+    buld_suits() {
+        this.suits = [0,1,2,3].map(x => this.get_suit(x));
+    }
+
+    get_suit(suit_code) {
+        return this.svgs.slice(suit_code*13, (suit_code+1)*13);
+    }
+
+    rotate_fan(card,i) {
+        let max_dt = Math.PI/64;
+        let dt = (1 - 2*Math.random())*max_dt;
+/*        let t0 = -dt;
+        let t1 = dt;
+        let L = i/12;
+        rotate_node(card, (1-L)*t0 + (L)*(t1-t0));*/
+        rotate_node(card, dt);
+    }
+
+    fan(suit_code) {
+        this.fanned_cards = this.get_suit(suit_code);
+        this.fanned_cards.forEach((card,i) => {
+
+            //this.rotate_fan(card,i);
+
+            card.style.top = this.top_edge + 'px';
+            card.style.display = '';
+            
+            let bbox = card.getBoundingClientRect();
+            console.log(bbox);
+            let move_to = this.left_edge + i*this.section_w; //+ 'px';
+            let lerp_onscreen = {val_start: bbox.left, val_end: move_to, elem: card,
+                                 set_attr: (e,v)=>{card.style.left = v+'px'} };
+            lerp_sync([lerp_onscreen], this.lerp_speed, null, (t)=>t*t); 
+            
+
+        });
+    }
+
+    hide_fan() {
+        if (this.fanned_cards) {
+            // Determine current display box to place selected card into.
+            
+            this.fanned_cards.forEach((card,i) => {
+                let bbox = card.getBoundingClientRect();
+                let left_to_pos, top_to_pos;
+                if (card == this.selected_card) {
+                    // Move card into currently-selected display box.
+                    left_to_pos = i*this.section_w; // TODO.. get right values here...
+                    top_to_pos = 0;
+                }
+                else {
+                    // Move card off screen.
+                    left_to_pos = this.hidden_left;
+                    top_to_pos = this.top_edge;
+                }
+                let lerp_left_pos = {val_start: bbox.left, val_end: left_to_pos,
+                                     set_attr: (e,v)=>{card.style.left = v+'px'}, elem: card};
+                let lerp_top_pos = {val_start: bbox.top, val_end: top_to_pos,
+                                     set_attr: (e,v)=>{card.style.top = v+'px'}, elem: card};
+                let lerp_rotation = {val_start:card.theta, val_end:0,
+                                     set_attr:(e,v) => rotate_node(e,v), elem: card};
+                lerp_sync([lerp_left_pos, lerp_top_pos, lerp_rotation], this.lerp_speed, null) ;
+            });
+            
+        }
+    }
+
+    choosing_update() {
+        let x = px //cx_real
+        let L = rescale(x, mn=0, mx=w, a=0, b=1)
+        let section = rescale(x, mn=0, mx=w, a=0,b=13)  // discretized..use to determine selected
+        let max_dy = this.card_h / 3 //100
+        let max_rot = Math.PI/16
+        let radius = this.section_w*3
+        let min_dist = 1000
+
+        this.fanned_cards.forEach((card,i) => { 
+            if (card != this.selected_card)
+                card.classList.remove('selected-svg-card')
+            let bbox = card.getBoundingClientRect()
+            let dx = x - (bbox.left + this.section_w/2); // deviation from center of card section
+            let abs_dx = Math.abs(dx)
+            let dy = 0
+            if (abs_dx < radius) { // in radius of dy effect
+                let steepness = 4
+                let dx_norm = abs_dx/radius
+                dy = max_dy*Math.pow(Math.E, -(Math.pow(steepness*dx_norm, 2)))// gaussian
+
+                if (abs_dx < min_dist){
+                    min_dist = abs_dx;
+                    selected_card = card;
+                    if(card_is_already_in_hand(selected_card)) {
+                        selected_card = null;
+                    }
+                }
+            }
+            else{ // not in radius of dy effect
+                dy = 0
+            }
+            card.style.top = this.top_edge + dy + 'px'
+            card.theta = max_rot*(dy/max_dy)
+            rotate_node(card, card.theta)
+//            rotate_node(card, max_rot*(dy/max_dy))
+        });
+        // TODO: do stuff with selected card
+        if (selected_card) {
+            this.selected_card = selected_card
+            selected_card.classList.add('selected-svg-card')
+            debug_info(selected_card.getAttribute('card-id'), 2)
+            console.log(selected_card)
+        }
+    }
+}
+
 var hand = { };
 var debug_node;
 var debug_msg = '';
-const DEBUG_MODE = false
-function debug_info(msg) {
-   if (DEBUG_MODE) {
+const DEBUG_MODE = true//false
+const DEBUG_LEVEL = 1
+function debug_info(msg, level=1) {
+   if (DEBUG_MODE && level > DEBUG_LEVEL) {
        debug_node.innerText = msg; 
        debug_msg = msg;
    }
@@ -1254,6 +1438,7 @@ function update_dimensions() {
     MAX_R = Math.round((.7)*d/2)
 }
 
+var card_fan;
 document.addEventListener("DOMContentLoaded", function(event) {
 
     update_dimensions()
@@ -1282,12 +1467,15 @@ document.addEventListener("DOMContentLoaded", function(event) {
     //suit_symbol_size_px = window.innerWidth/4;
     suit_default_opacity = 0.2;
     show_suit_choices();  
+    
 
     window.addEventListener("touchstart", touchstart, false);
     window.addEventListener("touchend", touchend, false);
     window.addEventListener("touchmove", touchmove, false);
     //window.addEventListener("touchmove", touchmove, false);
    // document.body.addEventListener("touchmove", touchmove, false);
+    card_fan = new CardFan(card_svgs_fan);
+     //card_fan.fan(0)
 
     //TODO: dynamic poll rate
     var get_round_data_interval_id = setInterval(get_round_data, POLL_INTERVAL)
