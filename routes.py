@@ -43,12 +43,12 @@ def write_db(db):
 #CODED_VALUES = dict(zip(CARD_VALUES, range(13)))
 #CODED_SUITS = dict(zip(SUITS, range(4))
 class Card:
-    def __init__(self, value, suit):
-        self.value = value
-        self.suit = suit
-        self.coded_value = DB.CODED_VALUES[value]
-        self.coded_suit = DB.CODED_SUITS[suit]
-        self.suit_unicode = SUIT_TO_UNICODE[suit]
+    def __init__(self, value:int, suit:int):
+        self.value = DB.CARD_VALS[value]
+        self.suit = DB.CARD_SUITS[suit]
+        self.coded_value = value
+        self.coded_suit = suit 
+        self.suit_unicode = SUIT_TO_UNICODE[self.suit]
         self.id = self.get_id()
 
     def get_id(self):
@@ -57,6 +57,11 @@ class Card:
     @classmethod
     def from_string(cls, card_string):
         value, suit = card_string.split('_')
+        return cls(DB.CODED_VALUES[value], DB.CODED_SUITS[suit])
+
+    @classmethod
+    def from_id(cls, card_id):
+        suit, value = divmod(card_id - 1, 13)
         return cls(value, suit)
 
 
@@ -64,8 +69,8 @@ class Hand:
     def __init__(self, user, user_id, card_a, card_b, ts, round_id):
         self.user = user
         self.user_id = user_id
-        self.card_a = Card.from_string(card_a)
-        self.card_b = Card.from_string(card_b)
+        self.card_a = Card.from_id(card_a) #Card.from_string(card_a)
+        self.card_b = Card.from_id(card_b) #Card.from_string(card_b)
         self.order_cards()
         self.ts = ts
         self.round_id = round_id
@@ -159,10 +164,10 @@ def fold_hand(db, user_id):
     db.execute('UPDATE hand SET folded = 1 WHERE player_id = (?) AND round_id = (?);', vals)
 
 
-def get_user_id(db, username):
-    user = db.execute('SELECT id FROM user WHERE username = (?);', (username,)).fetchone()
+def get_user(db, username):
+    user = db.execute('SELECT * FROM user WHERE username = (?);', (username,)).fetchone()
     if user:
-        return user['id']
+        return user
     else: # create new user here? TODO... should never happen, need users to register..
         cur = db.execute('INSERT INTO user (username, emoji, ip_addr) VALUES (?,?,?);',
                 (username, "Nomoji", None))
@@ -183,19 +188,19 @@ def api_fold():
     user = request.args.get('user')
     print('request to fold from', user)
     with DB.get_db() as db:
-        user_id = get_user_id(db, user) # TODO: fix this hack or make usernames unique
+        user_id = get_user(db, user)['id'] # TODO: fix this hack or make usernames unique
         fold_hand(db, user_id)
     return jsonify("folded successfully")
 
 @app.route('/api/hand')
 def api_hand():
     user = request.args.get('user')
-    card_a = request.args.get('card_a')
-    card_b = request.args.get('card_b')
+    card_a = int(request.args.get('card_a'))
+    card_b = int(request.args.get('card_b'))
     ip_addr = request.remote_addr
     ts = time.time()
     with DB.get_db() as db:
-        user_id = get_user_id(db, user) # TODO: fix this hack or make usernames unique
+        user_id = get_user(db, user)['id'] # TODO: fix this hack or make usernames unique
         round_id = get_current_round(db)['id']
         hand = Hand(user, user_id, card_a, card_b, ts, round_id) 
         post_hand(db, hand)
@@ -276,6 +281,9 @@ def ring_no_user():
 def ring(user): # TODO: make user register if first time here, otherwise load their emoji, etc...
     print('user entered the ring', user)
     with DB.get_db() as db:
+        user_profile = get_user(db, user)
+        if not user_profile:
+            return redirect(url_for('choose', user=user))
         round_data = get_current_round(db)
         round_id = round_data['id']
         round_no = round_data['round_no']
@@ -288,7 +296,7 @@ def ring(user): # TODO: make user register if first time here, otherwise load th
 
     pat = re.compile('.*(food|animal|music|clothing)')
     emoji = get_emoji(pat)
-    return render_template('ring.html', round_no=round_no, username=user,
+    return render_template('ring.html', round_no=round_no, user=dict(user_profile),
                             emoji=emoji, winners=winners)
 
 def get_emoji(pat):

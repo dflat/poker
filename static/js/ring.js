@@ -1,5 +1,3 @@
-var onlongtouch; 
-var timer;
 var touchduration = 100; //length of time we want the user to touch before we do something
 
 const POLL_INTERVAL = 1000;
@@ -19,26 +17,14 @@ function touchstart(e) {
     cx_real = touch.pageX
     cy_real = touch.pageY
 
-    if (!active_suit || e.touches.length > 1)
+    if (!active_suit || e.touches.length > 1) {
+        e.preventDefault();
         return
-    debug_info('touches:'+e.touches.length)
+    }
     e.preventDefault();
-    var card_node = cards[0];
-    var w = card_node.clientWidth;
-    var h = card_node.clientHeight;
-    var mn_cx = MAX_R + px_in_em
-    var mx_cx = d - (MAX_R + px_in_em)
-    var mx_cy = MAX_R + px_in_em
-    cx = Math.min(mx_cx, Math.max(mn_cx, cx_real))
-    cy = Math.max(mx_cy, cy_real)
     column_touched = rescale(cx_real,mn=0,mx=w,a=0,b=2)
 
-    //cards.forEach(Draw_circle);
-    //intervalID = setInterval(resize_circle, 8);
-
     card_fan.fan(suit_codes[active_suit])
-
-    timer = setTimeout(onlongtouch, touchduration); 
 }
 
 var other_player_box_touch_down = { }
@@ -191,23 +177,14 @@ function touchend(e) {
        reset_drag_to_advance_bar() 
     }
     allow_drag_to_advance_round()
-    //touchdown = false
 
+    /* reset UI */
     var ctx = plane.getContext('2d');
     ctx.clearRect(0,0,plane.width,plane.height);
     hide_card_nodes();
 
     card_fan.hide_fan()
-
-    //stops short touches from firing the event
-    if (intervalID){
-        r = 0;
-        clearInterval(intervalID);
-    }
-    if (timer)
-        clearTimeout(timer); // clearTimeout, not cleartimeout..
-    document.body.style.background = 'white';
-
+     
     if (selected_card && active_suit) {
         update_hand_state()
         advance_display_card_index()
@@ -216,8 +193,8 @@ function touchend(e) {
     reset_suit_nodes()
 
     // post hand if player-felt isn't what was just touched
-    if (Object.keys(hand).length == 2 && e.target.className != "other-players-box") {
-        post_hand(username, hand)
+    if (_hand.size == 2 && e.target.className != "other-players-box") {
+        _hand.post()
     }
         // && e.target.className == "suit-box")
 
@@ -233,7 +210,78 @@ function touchend(e) {
 
 }
 
+class Round {
+    constructor() {
+        this.round_no = 0;
+    }
+}
+/*
+function card_display_box_touched(e) {//DUPE
+    e.preventDefault()
+    if (cards_obscured)
+        return
+    const i = this.index
+    current_display_card_index = i
+    clear_selected_card()
+    remove_card_from_hand(i)
+    if (get_hand_size() == 0) {
+        current_display_card_index = 0
+    }
+}
+*/
+class Hand {
+    MAX_HAND_SIZE = 2;
+    API_ENDPOINT = '/api/hand';
+    constructor() {
+        this.cards = { }; // position index (0 or 1) => card_id (int)
+        this.current_index = 0;
+    }
+    add_card(card) {
+        let card_id = parseInt(card.getAttribute('card-id'))
+        this.cards[this.current_index] = card_id;
+        this.current_index = (this.current_index + 1) % this.MAX_HAND_SIZE;
+    }
+    remove_card_by_index(i) {
+        console.log(this.cards[i], 'removed from hand')
+        let removed_id = this.cards[i];
+        delete this.cards[i];
+        this.current_index = i;
+        return removed_id;
+    }
+    get size() {
+        return Object.keys(this.cards).length;
+    }
+    has_card(card) {
+        let card_id = parseInt(card.getAttribute('card-id'));
+        return Object.values(this.cards).includes(card_id);
+    }
+    swap() {
+    }
+    clear() {
+    }
+    obscure() {
+    }
+    fold() {
+    }
+    post() {
+      let user = user_profile.info.username;
+      console.log('posted hand for:'+user);
+      let query = `?user=${user}&card_a=${this.cards[0]}&card_b=${this.cards[1]}`;
+      let url = this.API_ENDPOINT + query;
+      ajax_request(url, this.hand_posted);
+      
+    }
+    hand_posted(xhr) {
+        let resp = xhr.response;
+        console.log(resp);
+    }
 
+    static get_suit_code(card_id) {
+        return Math.floor((card_id-1)/13)
+    }
+}
+
+var hand = { };
 var MAX_HAND_SIZE = 2;
 function update_hand_state() {
     var ix = current_display_card_index
@@ -492,6 +540,9 @@ function animate_box_offscreen(box, start_left_x) {
 //var touchdown = false
 function touchmove(event) {
     //touchdown = true
+    if (event.touches.length > 1) {
+        event.preventDefault();
+    }
     if (event.target.className == "other-players-box" && cx_real > 0.80*w) {
         drag_bar_to_advance_round(event)
     }
@@ -511,10 +562,6 @@ function touchmove(event) {
     */
 }
 
-onlongtouch = function() {
-    //document.body.style.background = 'blue';
-    console.log('touch noted.'); 
-};
 
 var plane;
 function init_canvas() {
@@ -708,7 +755,7 @@ function fold_box_touched(e) {
         return
     if (Object.keys(hand).length < 2)
         return
-    fold_hand(username)
+    fold_hand(data_from_server.user.username)
     var text_node = this.querySelector('a')
     text_node.innerText = 'folded'
 }
@@ -764,6 +811,13 @@ function obscure_box_touched(e) {
 }
 
 
+class User {
+    constructor(user_info) {
+        this.info = user_info;
+    }
+}
+
+
 var username;
 var round_node;
 function init_status_bar() {
@@ -785,12 +839,12 @@ function init_status_bar() {
     round_node.classList.add('status-tag')
     round_node.style.fontSize = font_size + 'px' 
 
-    console.log('data_from_server: '+ data_from_server['username'])
+    console.log('data_from_server: '+ data_from_server.user)
 
-    username = data_from_server['username'] || get('name') ||
-                        'default_name' + get_random_emoji()
+/*    username = data_from_server.user.username || get('name') ||
+                        'default_name' + get_random_emoji() */
 
-    name_node.innerText = username
+    name_node.innerText = data_from_server.user.username || 'default_name'
     round_node.innerText = 'round # ' + data_from_server['round_no']
 
     container.style.position = 'absolute'
@@ -866,7 +920,6 @@ function check_for_round_winners(round_no) {
 
 function check_if_won_last_round(player_info, div) {
     if (winners && winners.includes(player_info.id)) {
-//        div.style.background = 'yellow' // TODO: WIP
         let anchor = document.createElement('a')
         anchor.innerHTML = '&#128081;' // crown emoji👑
         anchor.style.position = 'relative'
@@ -880,14 +933,11 @@ function check_if_won_last_round(player_info, div) {
         let dx = div_bbox.left - anchor_bbox.left
         let dy = div_bbox.top - anchor_bbox.top
         let pixw = get_px_in_em(anchor)
-        console.log('dx,dy: ' + dx + ' ' + dy + 'bbox,div,anch:' + div_bbox + ' ' + anchor_bbox)
         anchor.style.top = dy - pixw/2 + 'px'
         anchor.style.left = dx - pixw + 'px'
         
         rotate_node(anchor, -Math.PI/4)
-
     }
-
 }
 
 function cull_player(username) {
@@ -985,7 +1035,6 @@ function lerp(elem, attr, val_start, val_end, dur, units, callback,lerp_func=(t)
 }
 
 function lerp_sync(changes, dur, callback, lerp_func=(t)=>t*t) {
-       console.log('lerp', changes);
        /* *
         * e.g.: changes = [{val_start:a, val_end:z, set_attr:func, elem:node}, {...}, ... ]
         * */
@@ -1055,14 +1104,17 @@ function init_card_svgs() {
     document.body.appendChild(card_fan_div)
 
     let aspect = 25/35
-    card_width = w/4 // get display-card-box0 and use its width - some padding (todo)
+    let disp_bbox = display_cards[0].getBoundingClientRect()
+    let card_padding = 40
+    card_height = disp_bbox.height - card_padding*2
+    card_width = card_height*aspect //w/4  
     let apply_style = (card_svg_collection, y_pos) => {
         card_svg_collection.forEach(card => {
             // add css class 'hidden' (todo?)
             card.style.display = 'none'
             card.style.position = 'absolute'
             card.style.width = card_width + 'px'
-            card.style.height = card_width*(1/aspect) + 'px'
+            card.style.height = card_height + 'px'//card_width*(1/aspect) + 'px'
             card.style.left = -card_width - 10 + 'px'
             card.style.top = y_pos + 'px'
         })
@@ -1070,6 +1122,7 @@ function init_card_svgs() {
     apply_style(card_svgs, 0)
     apply_style(card_svgs_fan, 0)
 }
+
 
 function place_card_svg(card_id, cx, cy) {
     let card = card_svgs[card_id-1]
@@ -1098,31 +1151,31 @@ function place_card_offscreen(card_id) {
     card.style.top = 0 + 'px'
 }
 
-class Hand {
-    constructor() {
-        this.card_left;
-        this.card_right;
-    }
-    swap() {
-    }
-    clear() {
-    }
-}
 
 class CardFan {
     constructor(svgs) {
         this.svgs = svgs;
         this.hidden_top = 0;
         this.hidden_left = -card_width;
-        this.top_pad = 20
-        let felt_bbox = other_players_box.getBoundingClientRect();
-        this.top_edge = felt_bbox.bottom + this.top_pad;
-        this.left_edge = felt_bbox.left;
+
         this.card_w = card_width;
         this.aspect = 25/35 
         this.card_h = card_width*(1/this.aspect)
-        this.section_w = (felt_bbox.width - card_width*0)/13; // or w/13 ?
-        this.lerp_speed = 300;
+
+        this.top_pad = 20
+        this.side_pad = 200
+        let felt_bbox = other_players_box.getBoundingClientRect();
+        this.top_edge = felt_bbox.bottom + this.top_pad;
+        //this.left_edge = felt_bbox.left + this.side_pad;
+        //this.section_w = (felt_bbox.width - this.side_pad*2 - card_width*0)/13; // or w/13 ?
+
+       
+        this.section_w = card_width/6 // Math.max(card_w/6,100)
+        let range = this.section_w*13
+        this.left_edge = (w - range) / 2
+        
+
+        this.lerp_speed = 200;
         this.active_suit = null;
         this.selected_card = null;
         this.fanned_cards = null;
@@ -1146,36 +1199,58 @@ class CardFan {
     }
 
     fan(suit_code) {
+        // Mark touchstart time
+        this.t0 = Date.now()
+        // remove stale card from hand (e.g. for accidental card selection)
+        if (_hand.size == _hand.MAX_HAND_SIZE) {
+            let removed_card_id = _hand.remove_card_by_index(_hand.current_index);
+            if (Hand.get_suit_code(removed_card_id) != suit_code) {
+                // lerp offscreen the card, if it is not the active suit being fanned
+                // otherwise, the card will be lerped back to the onscreen fan.
+                let card_to_remove = this.svgs[removed_card_id-1];
+                let bbox = card_to_remove.getBoundingClientRect();
+                let lerp_left_pos = {val_start: bbox.left, val_end: this.hidden_left,
+                                 set_attr: (e,v)=>{e.style.left = v+'px'}, elem: card_to_remove};
+                let lerp_top_pos = {val_start: bbox.top, val_end: this.top_edge,
+                                 set_attr: (e,v)=>{e.style.top = v+'px'}, elem: card_to_remove};
+                lerp_sync([lerp_left_pos, lerp_top_pos], this.lerp_speed, null) ;
+            }
+        }
+
         this.fanned_cards = this.get_suit(suit_code);
         this.fanned_cards.forEach((card,i) => {
 
-            //this.rotate_fan(card,i);
+            if (_hand.has_card(card)) {
+                return;
+            }
 
             card.style.top = this.top_edge + 'px';
             card.style.display = '';
+            //console.log('fanned', i)
             
             let bbox = card.getBoundingClientRect();
-            console.log(bbox);
             let move_to = this.left_edge + i*this.section_w; //+ 'px';
             let lerp_onscreen = {val_start: bbox.left, val_end: move_to, elem: card,
                                  set_attr: (e,v)=>{card.style.left = v+'px'} };
             lerp_sync([lerp_onscreen], this.lerp_speed, null, (t)=>t*t); 
-            
 
         });
     }
 
     hide_fan() {
         if (this.fanned_cards) {
-            // Determine current display box to place selected card into.
-            
             this.fanned_cards.forEach((card,i) => {
                 let bbox = card.getBoundingClientRect();
                 let left_to_pos, top_to_pos;
+                if (_hand.has_card(card)) {
+                    return;
+                }
                 if (card == this.selected_card) {
                     // Move card into currently-selected display box.
-                    left_to_pos = i*this.section_w; // TODO.. get right values here...
-                    top_to_pos = 0;
+                    let dest_pos = this.get_card_destination(_hand.current_index);
+                    _hand.add_card(card);
+                    left_to_pos = dest_pos.left;
+                    top_to_pos = dest_pos.top;
                 }
                 else {
                     // Move card off screen.
@@ -1201,15 +1276,18 @@ class CardFan {
         let max_dy = this.card_h / 3 //100
         let max_rot = Math.PI/16
         let radius = this.section_w*3
-        let min_dist = 1000
+        let min_dist = 1000 // just an initial, arbitrary large value
 
         this.fanned_cards.forEach((card,i) => { 
+            if (_hand.has_card(card))
+                return;
             if (card != this.selected_card)
                 card.classList.remove('selected-svg-card')
             let bbox = card.getBoundingClientRect()
             let dx = x - (bbox.left + this.section_w/2); // deviation from center of card section
             let abs_dx = Math.abs(dx)
             let dy = 0
+
             if (abs_dx < radius) { // in radius of dy effect
                 let steepness = 4
                 let dx_norm = abs_dx/radius
@@ -1226,22 +1304,42 @@ class CardFan {
             else{ // not in radius of dy effect
                 dy = 0
             }
-            card.style.top = this.top_edge + dy + 'px'
-            card.theta = max_rot*(dy/max_dy)
+
+            // spread cards out as a function of horizontal distance from touch
+            /*
+            let elapsed_t = Date.now() - this.t0
+            if (elapsed_t > 2000) {
+                let touch_dx = dx < 1 ? -1 : 1 
+                card.style.left = bbox.left - touch_dx*dy//(elapsed_t/2000)
+            }
+            */
+
+            card.style.top = this.top_edge - dy + 'px'
+            let M = i/13
+            card.theta = (-max_rot*(1-M) + max_rot*(M))*(dy/max_dy)
             rotate_node(card, card.theta)
-//            rotate_node(card, max_rot*(dy/max_dy))
-        });
+        }); 
         // TODO: do stuff with selected card
         if (selected_card) {
+            if (px < this.left_edge - radius/2){
+                this.selected_card = null;
+                return
+            }
             this.selected_card = selected_card
             selected_card.classList.add('selected-svg-card')
             debug_info(selected_card.getAttribute('card-id'), 2)
-            console.log(selected_card)
         }
+    }
+
+    get_card_destination(display_box_id) {
+        let display_elem = display_cards[display_box_id]
+        let display_bbox = display_elem.getBoundingClientRect()
+        let cx = display_bbox.left + display_bbox.width/2
+        let cy = display_bbox.top + display_bbox.height/2
+        return {left:cx - this.card_w/2, top:cy - this.card_h/2}
     }
 }
 
-var hand = { };
 var debug_node;
 var debug_msg = '';
 const DEBUG_MODE = true//false
@@ -1331,11 +1429,12 @@ function get_round_data(pass_thru_lock=false) {
 }
 
 function process_round_data(xhr) {
+    if (!xhr.response)
+        return
     var data = JSON.parse(xhr.response)
     var keys = Object.keys(data)
     if (keys.length == 0)
         return
-    console.log(data['round_no'])
     update_round_node(data['round_no'])
     
     var players = data['players']
@@ -1472,10 +1571,10 @@ document.addEventListener("DOMContentLoaded", function(event) {
     window.addEventListener("touchstart", touchstart, false);
     window.addEventListener("touchend", touchend, false);
     window.addEventListener("touchmove", touchmove, false);
-    //window.addEventListener("touchmove", touchmove, false);
-   // document.body.addEventListener("touchmove", touchmove, false);
+
     card_fan = new CardFan(card_svgs_fan);
-     //card_fan.fan(0)
+    _hand = new Hand();
+    user_profile = new User(data_from_server.user);
 
     //TODO: dynamic poll rate
     var get_round_data_interval_id = setInterval(get_round_data, POLL_INTERVAL)
