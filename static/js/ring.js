@@ -60,11 +60,6 @@ function card_display_box_touched(e) {
 
 }
 
-function get_hand_size() { return Object.keys(hand).length }
-
-function remove_card_from_hand(i) {
-    delete hand[i]
-}
 
 function get_px_in_em(elem) {
     return parseFloat(getComputedStyle(elem).fontSize);
@@ -135,6 +130,7 @@ function rotate_node(node, theta){
     node.style.msTransform     = 'rotate('+theta+'rad)';
     node.style.oTransform      = 'rotate('+theta+'rad)';
     node.style.transform       = 'rotate('+theta+'rad)';
+    node.theta = theta // TESTING EXPERIMENT
 }
 
 var cx = 0;
@@ -237,28 +233,140 @@ class Hand {
     constructor() {
         this.cards = { }; // position index (0 or 1) => card_id (int)
         this.current_index = 0;
+        this.dragging = false;
+        this.drag_offset = [0,0];
+        this.folded = false
     }
     add_card(card) {
-        let new_card_id = parseInt(card.getAttribute('card-id'))
-        this.cards[this.current_index] = new_card_id;
+        // add to internal hand model 
+        let card_id = parseInt(card.getAttribute('card-id'))
+        this.cards[this.current_index] = card_id;
 
-        let new_card = card_fan.get_card(new_card_id)
-        new_card.classList.add(`hand-${this.current_index}`)
+        // apply special UI behavior
+        card.classList.add(`hand-${this.current_index}`)
+        card.addEventListener('touchstart', this.start_drag)
+        card.addEventListener('touchmove', this.update_drag)
+        card.addEventListener('touchend', this.end_drag)
 
+        // move into hand position on screen
+        let dest = this.get_destination(this.current_index)
+        card_fan.move_card(card, dest)
+        
+        // advance internal hand model's index
         this.current_index = (this.current_index + 1) % this.MAX_HAND_SIZE;
     }
     remove_card_by_index(i) {
         if (!(i in this.cards))
             return null;
-        console.log(this.cards[i], 'removed from hand')
         let removed_id = this.cards[i];
 
         let old_card = card_fan.get_card(removed_id)
-        old_card.classList.remove(`hand-${this.current_index}`)
+        console.log('removed from hand: ', old_card)
+        old_card.classList.remove(`hand-${i}`)
+        old_card.classList.remove(`selected-svg-card`)
+        old_card.removeEventListener('touchstart', this.start_drag)
+        old_card.removeEventListener('touchmove', this.update_drag)
+        old_card.removeEventListener('touchend', this.end_drag)
 
         delete this.cards[i];
         this.current_index = i;
         return removed_id;
+    }
+    start_drag(event) {
+        if (_hand.size < 2)
+            return
+        console.log(_hand.cards)
+        _hand.dragging = true
+        physics.update(event)
+        for (let hand_index in _hand.cards) {
+            let card = card_fan.get_card(_hand.cards[hand_index])
+            let bbox = card.getBoundingClientRect()
+            _hand.drag_offset[hand_index] = {left: physics.px_start - bbox.left,
+                                             top: physics.py_start - bbox.top}
+            console.log(physics.px_start, physics.py_start)
+            console.log(bbox)
+            console.log(_hand.drag_offset)
+        }
+    }
+    update_drag(event) {
+        if (!_hand.dragging)
+            return
+        event.preventDefault()
+        if (event.touches.length > 1)
+            return
+        console.log('dragging hand', event.target.getAttribute('card-id'))
+        _hand.move_hand_position({top:physics.py, left:physics.px}, _hand.drag_offset)
+    }
+    end_drag(event) {
+        if (!_hand.dragging)
+            return
+        _hand.dragging = false
+        _hand.toss()
+    }
+    toss() {
+        let normed_speed = physics.speed/physics.max_speed
+        let max_rot = Math.PI
+        let max_dx = card_fan.card_h*3
+        let max_dy = card_fan.card_h*5
+        let dx = normed_speed*(physics.dir_vec.x)*max_dx
+        let dy = normed_speed*(physics.dir_vec.y)*max_dy
+
+        debug_info('theta:'+(physics.theta*(180/Math.PI)).toFixed(2) +
+            'vel:' +physics.speed.toFixed(2) + 'normspeed:' + normed_speed.toFixed(1), 2)
+
+        if (normed_speed > 0.2) {
+            let dur = 100
+            let lerp_func = (t)=>(1 - Math.pow((1 - t), 2))
+            for (var i in this.cards) {
+                let R = Math.random()
+                let rot = (normed_speed)*(max_rot/2) + (.5 + R/2)*(max_rot/2)
+                //let rot = (.25 + normed_speed/2)*(max_rot/2) + (.5 + R/2)*(max_rot/2)
+                let card = card_fan.get_card(this.cards[i])
+                let bbox = card.getBoundingClientRect()
+                let dest = {top: bbox.top + dy*.5 + dy*(R/2 + 0.25) ,
+                            left: bbox.left + dx*.5 + dx*(R/2 + 0.25),
+                            theta: card.theta + rot}
+                //card_fan.move_card(card, dest, dur, null, lerp_func)
+                card_fan.move_card(card, dest, dur, ()=>this.after_fold(), lerp_func)
+            }
+            this.fold()
+        }
+        else {
+            _hand.restore_hand_position()
+        }
+    }
+    move_hand_position(dest, offsets) {
+        for (let hand_index in this.cards) {
+            let card = card_fan.get_card(this.cards[hand_index])
+            let bbox = card.getBoundingClientRect()
+            if (dest.left) card.style.left = dest.left - offsets[hand_index].left + 'px'
+            if (dest.top) card.style.top = dest.top - offsets[hand_index].top + 'px'
+            if (dest.theta) rotate_node(card, dest.theta)
+        }
+    }
+
+    after_fold() {
+        for (let hand_index in _hand.cards) {
+            let card = card_fan.get_card(_hand.cards[hand_index])
+            let fade = {val_start:1, val_end:0, set_attr:(e,v)=>e.style.opacity=v, elem:card}
+           // lerp_sync([fade], 2000)//, ()=>this.reset())//, ()=>_hand.clear(hand_index))
+        }
+    }
+
+    restore_hand_position() {
+        for (let hand_index in this.cards) {
+            let dest = this.get_destination(hand_index)
+            let card = card_fan.get_card(this.cards[hand_index])
+            card_fan.move_card(card, dest)
+        }
+    }
+    get_destination(hand_index) {
+        let pad = card_fan.card_w/4
+        let left = pad + (card_fan.section_w)*hand_index
+        let top =  h - card_fan.card_h*(2/3)
+        let max_theta = Math.PI/32
+        let theta = hand_index == 0 ? -max_theta : max_theta
+        return {left:left, top:top, theta:theta};
     }
     get size() {
         return Object.keys(this.cards).length;
@@ -272,6 +380,9 @@ class Hand {
     reset() {
         this.clear_card(0)
         this.clear_card(1)
+        this.current_index = 0
+        this.folded = false
+        console.log('hand reset')
     }
     clear_card(card_index) {
         let removed_card_id = this.remove_card_by_index(card_index);
@@ -286,10 +397,12 @@ class Hand {
         const endpoint = '/api/hand/fold'
         let query = `?user=${user_profile.info.username}`;
         let url = endpoint + query
-        ajax_request(url, this.hand_folded);
+        ajax_request(url, (xhr)=>this.hand_folded(xhr));
     }
     hand_folded(xhr) {
         let resp = xhr.response;
+        this.folded = true
+        console.log('folded set to true', this.folded)
         console.log(resp);
     }
     post() {
@@ -551,32 +664,57 @@ function drag_bar_to_advance_round(event) {
 
 class Physics {
     constructor() {
-        this.vel_x = 0;
-        this.vel_y = 0;
         this.acc_x = 0;
         this.acc_y = 0;
         this.px = 0;
         this.py = 0;
+        this.px_start = 0;
+        this.py_start = 0;
         this.t = Date.now();
+        this.t0 = Date.now();
         this.dt = 0;
         this.disp_x = 0;
         this.disp_y = 0;
-        this.max_vel_y = 0;
+        this.max_v = 10
+        this.max_speed = Math.hypot(this.max_v, this.max_v)
+        this.history_n = 30
+        this.pos_history = []
+    }
+    get vel_x() {
+        return Math.min(this.max_v, Math.abs(this.vel_x_raw)) * (this.vel_x_raw < 0 ? -1 : 1)
+    }
+    get vel_y() {
+        return Math.min(this.max_v, Math.abs(this.vel_y_raw)) * (this.vel_y_raw < 0 ? -1 : 1)
+    }
+    get speed() {
+        return Math.hypot(this.vel_x, this.vel_y)
+    }
+    get theta() {
+        return Math.atan2(this.dir_vec.y, this.dir_vec.x)
+    }
+    get dir_vec() {
+        return {x:this.vel_x/this.speed, y:this.vel_y/this.speed}
     }
     update(event) {
         this.touch = event.touches[0]
         let px = this.touch.pageX
         let py = this.touch.pageY
+        if (event.type == 'touchstart') {
+            this.px_start = px
+            this.py_start = py
+            this.t0 = Date.now()
+        }
+        if (event.type == 'touchend') {
+        }
+
         this.disp_x = px - this.px
         this.disp_y = py - this.py
 
         let t = Date.now()
         this.dt  = t - this.t
         
-        this.vel_x = this.disp_x / this.dt
-        this.vel_y = this.disp_y / this.dt
-        this.max_vel_y = this.vel_y > this.max_vel_y ? this.vel_y : this.max_vel_y
-        //debug_info('vel_y:' + this.vel_y, 2)
+        this.vel_x_raw = this.disp_x / this.dt
+        this.vel_y_raw = this.disp_y / this.dt
 
         this.t = t 
         this.px = px
@@ -644,7 +782,7 @@ function reset_suit_size(node){
 
 var suit_box_touched_interval_id;
 function suit_box_touched(e) {
-    if (e.touches.length > 1 || cards_obscured)
+    if (e.touches.length > 1 || cards_obscured || _hand.folded)
         return
     e.preventDefault()
     suit_box_touched_interval_id = setInterval(modulate_suit_size, 16, this)
@@ -793,18 +931,6 @@ function init_obscure_btn() {
     document.body.appendChild(container)
 }
 
-var folded = false; //TODO: use this to allow unfolding
-function fold_box_touched(e) {
-    e.preventDefault()
-    if (e.touches.length > 1)
-        return
-    if (_hand.size < 2)
-        return
-    _hand.fold()
-    //fold_hand(data_from_server.user.username)
-    var text_node = this.querySelector('a')
-    text_node.innerText = 'folded'
-}
 
 var cards_obscured = false
 var hidden_cards_text = []
@@ -1116,7 +1242,7 @@ function clear_winners() {
 
 function clean_slate_for_new_round() {
     reset_drag_to_advance_bar()
-    fold_text_node.innerText = 'fold'
+    //fold_text_node.innerText = 'fold'
     un_obscure_cards()
     clear_winners()
     _hand.reset()
@@ -1135,6 +1261,7 @@ function clean_slate_for_new_round() {
 var card_svgs;
 var card_svgs_fan = []
 var card_width;
+var card_backs = []
 function init_card_svgs() {
     card_svgs = document.querySelectorAll('#card-svgs > svg') // Original svg set
 
@@ -1147,6 +1274,7 @@ function init_card_svgs() {
     })
     document.body.appendChild(card_fan_div)
 
+    
     let aspect = 25/35
     let disp_bbox = display_cards[0].getBoundingClientRect()
     let card_padding = 40
@@ -1165,6 +1293,23 @@ function init_card_svgs() {
     }
     apply_style(card_svgs, 0)
     apply_style(card_svgs_fan, 0)
+
+    // clone card backs
+    let card_back_original = document.querySelector('#card-back-container #svg2')
+    let card_backs_div = document.createElement('div')
+    let n = 2;
+    card_backs_div.id = "card-backs"
+    for (let i=0; i<n; i++) {
+        let back = card_back_original.cloneNode(true)
+        back.id = `card-back-${i}`
+        back.style.position = 'absolute'
+        back.style.width = card_width + 'px'
+        back.style.height = card_height + 'px'
+        back.style.left = card_width/4 + 'px'
+        back.style.top = h + card_height/2 + 'px'
+        card_backs_div.appendChild(back)
+    }
+    document.body.appendChild(card_backs_div)
 }
 
 
@@ -1226,7 +1371,8 @@ class CardFan {
         this.active_suit = null;
         this.fanned_cards = null;
         this.svgs.forEach(svg=>{svg.style.left=this.hidden_left;
-                                svg.style.top =this.hidden_top;});
+                                svg.style.top =this.hidden_top;
+                                svg.style.opacity=1;});
     }
 
     get_suit(suit_code) {
@@ -1243,13 +1389,8 @@ class CardFan {
     }
 
     hide_card(card_id) {
-        let card_to_remove = this.svgs[card_id-1];
-        let bbox = card_to_remove.getBoundingClientRect();
-        let lerp_left_pos = {val_start: bbox.left, val_end: this.hidden_left,
-                         set_attr: (e,v)=>{e.style.left = v+'px'}, elem: card_to_remove};
-        let lerp_top_pos = {val_start: bbox.top, val_end: this.top_edge,
-                         set_attr: (e,v)=>{e.style.top = v+'px'}, elem: card_to_remove};
-        lerp_sync([lerp_left_pos, lerp_top_pos], this.lerp_speed, null) ;
+        let dest = {left:this.hidden_left, top: this.top_edge, theta:0}
+        this.move_card(this.get_card(card_id), dest)
     }
 
     fan(suit_code) {
@@ -1257,6 +1398,7 @@ class CardFan {
         // remove stale card from hand (e.g. for accidental card selection)
         if (_hand.size == _hand.MAX_HAND_SIZE) {
             let removed_card_id = _hand.remove_card_by_index(_hand.current_index);
+            // todo: remove selected-card css class
             if (Hand.get_suit_code(removed_card_id) != suit_code) {
                 // If it's not the active suit being fanned, move the card offscreen.
                 this.hide_card(removed_card_id);
@@ -1267,48 +1409,54 @@ class CardFan {
             if (_hand.has_card(card)) {
                 return;
             }
-            card.style.top = py - this.card_h + 'px';//this.top_edge + 'px';
+            //card.style.top = py - this.card_h + 'px';//this.top_edge + 'px'; //INSTANT (no lerp)
             card.style.display = '';
             
             let bbox = card.getBoundingClientRect();
-            let move_to = this.left_edge + i*this.section_w; //+ 'px';
-            let lerp_onscreen = {val_start: bbox.left, val_end: move_to, elem: card,
+            let move_to_top = py - this.card_h
+            let move_to_left = this.left_edge + i*this.section_w; //+ 'px';
+            let lerp_onscreen_left = {val_start: bbox.left, val_end: move_to_left, elem: card,
                                  set_attr: (e,v)=>{card.style.left = v+'px'} };
-            lerp_sync([lerp_onscreen], this.lerp_speed, null, (t)=>t*t); 
+            let lerp_onscreen_top = {val_start: bbox.top, val_end: move_to_top, elem: card,
+                                 set_attr: (e,v)=>{card.style.top = v+'px'} };
+            let lerp_onscreen_theta = {val_start: card.theta || 0, val_end: 0, elem: card,
+                                 set_attr: (e,v)=>rotate_node(e,v) };
+            lerp_sync([lerp_onscreen_left, lerp_onscreen_top, lerp_onscreen_theta],
+                       this.lerp_speed, null, (t)=>t*t); 
         });
-//        this.choosing_update() //EXPERIMENTAL
+        //this.choosing_update() //EXPERIMENTAL
     }
 
     hide_fan() {
-        if (this.fanned_cards) {
-            this.fanned_cards.forEach((card,i) => {
-                let bbox = card.getBoundingClientRect();
-                let left_to_pos, top_to_pos;
-                if (_hand.has_card(card)) { // don't fan out a card already chosen and in hand
-                    return;
-                }
-                if (card == this.selected_card) {
-                    // Move card into currently-selected hand position / display zone.
-                    let dest_pos = this.get_card_destination(_hand.current_index);
-                    _hand.add_card(card);
-                    left_to_pos = dest_pos.left;
-                    top_to_pos = dest_pos.top;
-                }
-                else {
-                    // Move card off screen.
-                    left_to_pos = this.hidden_left;
-                    top_to_pos = this.top_edge;
-                }
-                let lerp_left_pos = {val_start: bbox.left, val_end: left_to_pos,
-                                     set_attr: (e,v)=>{card.style.left = v+'px'}, elem: card};
-                let lerp_top_pos = {val_start: bbox.top, val_end: top_to_pos,
-                                     set_attr: (e,v)=>{card.style.top = v+'px'}, elem: card};
-                let lerp_rotation = {val_start:card.theta, val_end:0,
-                                     set_attr:(e,v) => rotate_node(e,v), elem: card};
-                lerp_sync([lerp_left_pos, lerp_top_pos, lerp_rotation], this.lerp_speed, null) ;
-            });
-            
-        }
+        if (!this.fanned_cards)
+            return;
+        this.fanned_cards.forEach((card,i) => {
+            if (_hand.has_card(card)) {       // Don't hide a card if it's in the player's hand.
+                return;
+            }
+            if (card == this.selected_card) { // Move card into hand.
+                _hand.add_card(card);
+            }
+            else {                            // Move card off screen.
+                let dest = {left:this.hidden_left, top: this.top_edge, theta:0}
+                this.move_card(card, dest)
+            }
+        });
+    }
+
+    move_card(card, dest, dur, callback, lerp_func) {
+        lerp_func = lerp_func || ((t)=>(t*t))
+        dur = dur || this.lerp_speed
+        callback = callback || null
+        let bbox = card.getBoundingClientRect();
+        let lerp_left_pos = {val_start: bbox.left, val_end: dest.left,
+                             set_attr: (e,v)=>{card.style.left = v+'px'}, elem: card};
+        let lerp_top_pos = {val_start: bbox.top, val_end: dest.top,
+                             set_attr: (e,v)=>{card.style.top = v+'px'}, elem: card};
+        let lerp_rotation = {val_start:card.theta, val_end:dest.theta,
+                             set_attr:(e,v) => rotate_node(e,v), elem: card};
+        lerp_sync([lerp_left_pos, lerp_top_pos, lerp_rotation], dur, callback, lerp_func);
+        //klerp_sync([lerp_left_pos, lerp_top_pos, lerp_rotation], this.lerp_speed, null);
     }
 
     choosing_update() {
@@ -1371,8 +1519,7 @@ class CardFan {
 //            stagger = Math.abs(stagger) < 10 ? stagger : stagger
             stagger = Math.abs(physics.vel_x) > Math.abs(physics.vel_y) ? 0 : stagger
             */
-            let stagger = 0;
-            card.style.top = py - this.card_h + stagger - dy + 'px'
+            card.style.top = py - this.card_h - dy + 'px'
 
             let M = i/13
             card.theta = (-max_rot*(1-M) + max_rot*(M))*(dy/max_dy)
@@ -1380,29 +1527,13 @@ class CardFan {
         }); 
         // TODO: do stuff with selected card
         if (selected_card) {
-            if (px < this.left_edge - radius/2){
+            if (px < this.left_edge - radius/2){  // cancel selection if near left screen
                 this.selected_card = null;
                 return
             }
             this.selected_card = selected_card
             selected_card.classList.add('selected-svg-card')
         }
-    }
-
-    get_card_destination(display_box_id) {
-        let left = 0 + display_box_id * this.section_w;
-        let bot = document.body.getBoundingClientRect().bottom
-        let top = bot - this.card_h + (1-display_box_id)*this.section_w*2;
-        let pad = 20
-        left = pad + (this.section_w)*display_box_id
-        top =  bot - this.card_h/3 // - this.section_w //+ (display_box_id)*this.section_w;
-        return {left:left,top:top};
-
-        let display_elem = display_cards[display_box_id]
-        let display_bbox = display_elem.getBoundingClientRect()
-        let cx = display_bbox.left + display_bbox.width/2
-        let cy = display_bbox.top + display_bbox.height/2
-        return {left:cx - this.card_w/2, top:cy - this.card_h/2}
     }
 }
 
@@ -1615,7 +1746,7 @@ document.addEventListener("DOMContentLoaded", function(event) {
     console.log('winners from page load: ' + winners)
     init_other_players_box()
     init_obscure_btn();
-    init_fold_btn();
+    //init_fold_btn();
     init_card_display_node(0) // to display two chosen cards
     init_card_display_node(1)
     init_drag_to_advance_bar()

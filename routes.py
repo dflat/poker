@@ -1,13 +1,13 @@
-from flask import Flask, render_template, request, jsonify, redirect, Response
+from flask import Flask, render_template, request, jsonify, redirect, url_for, Response
 import random
 import re
+import subprocess
 import time
 import json
 import pickle
 from collections import defaultdict
 import db as DB
 
-DB_PATH = 'static/data/db.pickle'
 
 app = Flask(__name__)
 
@@ -22,26 +22,6 @@ def get_card_lookup():
         return {card['id']:dict(card) for card in cards}
 CARD_LOOKUP = get_card_lookup()
 
-def init_db():
-    return {'current_round_id': 0, 'rounds': defaultdict(dict)}
-
-def get_db():
-    try:
-        with open(DB_PATH, 'rb') as f:
-            db = pickle.load(f)
-    except FileNotFoundError:
-        # rounds: {round_id => {user=>hand}}
-        db = init_db()
-    return db
-
-def write_db(db):
-    with open(DB_PATH, 'wb') as f:
-        pickle.dump(db, f)
-    print('db state saved')
-
-#CARD_VALUES = ['2','3','4','5','6','7','8','9','10','J','Q','K','A']
-#CODED_VALUES = dict(zip(CARD_VALUES, range(13)))
-#CODED_SUITS = dict(zip(SUITS, range(4))
 class Card:
     def __init__(self, value:int, suit:int):
         self.value = DB.CARD_VALS[value]
@@ -168,10 +148,11 @@ def get_user(db, username):
     user = db.execute('SELECT * FROM user WHERE username = (?);', (username,)).fetchone()
     if user:
         return user
-    else: # create new user here? TODO... should never happen, need users to register..
-        cur = db.execute('INSERT INTO user (username, emoji, ip_addr) VALUES (?,?,?);',
-                (username, "Nomoji", None))
-        return cur.lastrowid
+    return None
+    #else: # create new user here? TODO... should never happen, need users to register..
+    #    cur = db.execute('INSERT INTO user (username, emoji, ip_addr) VALUES (?,?,?);',
+    #            (username, "Nomoji", None))
+    #    return None #cur.lastrowid # TODO : disallow this creating of users
 
 
 def get_hands_in_round(db, round_id):
@@ -212,10 +193,11 @@ def api_new_user():
     username = request.args.get('username')
     emoji = request.args.get('emoji')
     ip_addr = request.remote_addr
+    mac_addr = ip_to_mac(ip_addr)
     with DB.get_db() as db:
         try:
-            cur = db.execute('INSERT INTO user (username, emoji, ip_addr) VALUES (?,?,?);',
-                                               (username, emoji, ip_addr))
+            cur = db.execute('INSERT INTO user (username, emoji, ip_addr, mac_addr) \
+                              VALUES (?,?,?,?);', (username, emoji, ip_addr, mac_addr))
             success = cur.rowcount
             print(f'new user {username} with emoji {emoji} -- created from: {ip_addr}')
         except db.IntegrityError:
@@ -324,11 +306,6 @@ def play_no_username():
 @app.route('/play/<user>')
 def play(user):
     return redirect(url_for('ring', user=user))
-#    db = get_db()
-#    round_id = db['current_round_id']
-#    values = ['2','3','4','5','6','7','8','9','10','J','Q','K','A']
-#    return render_template('play.html', suits=SUIT_TO_UNICODE,
-#                            values=values,user=user, round_id=round_id)
 
 @app.route('/watch')
 def watch():
@@ -363,3 +340,14 @@ def api_update_hands(): #TODO: dont re-render html, do a data swap out of the do
 
     return render_template('watch_frag_hands.html', hands=player_to_hand_map,
                             round_no=round_data['round_no'])
+def ip_to_mac(ip):
+    cmd = f"arp {ip}"
+    exitcode, output = subprocess.getstatusoutput(cmd)
+    if (exitcode == 0):
+        pat = r'..:..:..:..:..:..'
+        match = re.search(pat, output)
+        if match:
+            return match.group(0)
+    else:
+        print(output)
+        return None

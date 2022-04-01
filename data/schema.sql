@@ -11,6 +11,7 @@ CREATE TABLE user (
   username TEXT UNIQUE NOT NULL,
   emoji TEXT NOT NULL,
   ip_addr TEXT,
+  mac_addr TEXT,
   created TIMESTAMP NOT NULL DEFAULT (datetime(CURRENT_TIMESTAMP, 'localtime'))
 );
 
